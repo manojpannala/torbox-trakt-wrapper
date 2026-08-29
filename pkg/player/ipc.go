@@ -75,7 +75,9 @@ func DialIPC(ctx context.Context, socketPath string, maxWait time.Duration) (*IP
 }
 
 func (c *IPCClient) readLoop() {
-	defer c.Close()
+	defer func() {
+		_ = c.Close()
+	}()
 
 	for {
 		line, err := c.reader.ReadBytes('\n')

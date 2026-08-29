@@ -18,7 +18,9 @@ import (
 func TestMPVPlayer_Options(t *testing.T) {
 	customDir, err := os.MkdirTemp("", "mpv-sock-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(customDir)
+	defer func() {
+		_ = os.RemoveAll(customDir)
+	}()
 
 	scrobbler := &mockScrobbler{}
 

@@ -168,7 +168,7 @@ var listCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "ID\tTRAKT\tTITLE\tSIZE\tSTATUS")
+		_, _ = fmt.Fprintln(w, "ID\tTRAKT\tTITLE\tSIZE\tSTATUS")
 		for _, item := range items {
 			badge := item.TraktBadge
 			if badge == "" {
@@ -178,7 +178,7 @@ var listCmd = &cobra.Command{
 			if status == "downloading" {
 				status = fmt.Sprintf("%.0f%%", item.Progress)
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", item.ID, badge, item.CleanTitle, item.FormattedSize, status)
+			_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", item.ID, badge, item.CleanTitle, item.FormattedSize, status)
 		}
 		return w.Flush()
 	},

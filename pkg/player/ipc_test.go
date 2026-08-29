@@ -46,7 +46,9 @@ func startMockMPVSocket(t *testing.T, handler func(cmd []interface{}) (interface
 }
 
 func handleMockConn(conn net.Conn, handler func(cmd []interface{}) (interface{}, string)) {
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	scanner := bufio.NewScanner(conn)
 
 	for scanner.Scan() {
@@ -108,7 +110,9 @@ func TestIPCClient_GetProperties(t *testing.T) {
 
 	client, err := player.DialIPC(ctx, sockPath, 2*time.Second)
 	require.NoError(t, err)
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	var eventReceived bool
 	client.OnEvent(func(event string, data json.RawMessage) {

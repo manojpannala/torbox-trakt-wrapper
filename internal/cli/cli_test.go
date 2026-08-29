@@ -45,7 +45,9 @@ func TestCLI_Version(t *testing.T) {
 func TestCLI_Config(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "cli-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	cfgPath := filepath.Join(tmpDir, "config.toml")
 	out, err := executeCommand("--config", cfgPath, "config", "path")
@@ -64,7 +66,9 @@ func TestCLI_Config(t *testing.T) {
 func TestCLI_AuthTorBox(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "cli-auth-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	cfgPath := filepath.Join(tmpDir, "config.toml")
 	_ = config.DefaultConfig().SaveToFile(cfgPath)
@@ -151,7 +155,9 @@ func TestCLI_ListAndAdd(t *testing.T) {
 
 	tmpDir, err := os.MkdirTemp("", "cli-list-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	cfgPath := filepath.Join(tmpDir, "config.toml")
 	cfg := config.DefaultConfig()
@@ -206,7 +212,9 @@ func TestCLI_StreamNotFound(t *testing.T) {
 
 	tmpDir, err := os.MkdirTemp("", "cli-stream-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	cfgPath := filepath.Join(tmpDir, "config.toml")
 	cfg := config.DefaultConfig()
