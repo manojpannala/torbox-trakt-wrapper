@@ -18,8 +18,8 @@ var (
 )
 
 type ipcRequest struct {
-	Command   []interface{} `json:"command"`
-	RequestID uint64        `json:"request_id"`
+	Command   []any  `json:"command"`
+	RequestID uint64 `json:"request_id"`
 }
 
 type ipcResponse struct {
@@ -33,7 +33,7 @@ type IPCClient struct {
 	conn       net.Conn
 	reader     *bufio.Reader
 	mu         sync.Mutex
-	reqSeq     uint64
+	reqSeq     atomic.Uint64
 	pending    map[uint64]chan ipcResponse
 	closed     chan struct{}
 	closeOnce  sync.Once
@@ -45,13 +45,10 @@ func DialIPC(ctx context.Context, socketPath string, maxWait time.Duration) (*IP
 	var conn net.Conn
 	var err error
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 
+	for {
 		conn, err = net.Dial("unix", socketPath)
 		if err == nil {
 			break
@@ -60,7 +57,12 @@ func DialIPC(ctx context.Context, socketPath string, maxWait time.Duration) (*IP
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("timed out connecting to mpv socket %s: %w", socketPath, err)
 		}
-		time.Sleep(50 * time.Millisecond)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
 	}
 
 	client := &IPCClient{
@@ -116,8 +118,8 @@ func (c *IPCClient) readLoop() {
 	}
 }
 
-func (c *IPCClient) SendCommand(ctx context.Context, cmd ...interface{}) (json.RawMessage, error) {
-	reqID := atomic.AddUint64(&c.reqSeq, 1)
+func (c *IPCClient) SendCommand(ctx context.Context, cmd ...any) (json.RawMessage, error) {
+	reqID := c.reqSeq.Add(1)
 	req := ipcRequest{
 		Command:   cmd,
 		RequestID: reqID,
@@ -203,10 +205,7 @@ func (c *IPCClient) Close() error {
 			_ = c.conn.Close()
 		}
 		c.mu.Lock()
-		for _, ch := range c.pending {
-			close(ch)
-		}
-		c.pending = make(map[uint64]chan ipcResponse)
+		clear(c.pending)
 		c.mu.Unlock()
 	})
 	return nil

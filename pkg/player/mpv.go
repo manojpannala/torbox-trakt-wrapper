@@ -126,8 +126,8 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 			client, err := DialIPC(dialCtx, socketPath, 5*time.Second)
 			if err == nil {
 				monitor := NewMonitor(client, media.Parsed, p.scrobbler, socketPath)
-				session.controller = monitor
-				monitor.Start()
+				session.controller.Store(monitor)
+				monitor.Start(ctx)
 			}
 		}()
 	}
@@ -141,8 +141,8 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 		}()
 
 		err := cmd.Wait()
-		if session.controller != nil {
-			session.controller.Stop()
+		if c := session.controller.Load(); c != nil {
+			c.Stop()
 		}
 		session.Err = err
 	}()

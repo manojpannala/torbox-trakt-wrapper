@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
@@ -39,7 +40,7 @@ type Session struct {
 	SocketPath string
 	Done       chan struct{}
 	Err        error
-	controller *Monitor
+	controller atomic.Pointer[Monitor]
 }
 
 func (s *Session) Wait() error {
@@ -48,8 +49,8 @@ func (s *Session) Wait() error {
 }
 
 func (s *Session) Close() error {
-	if s.controller != nil {
-		s.controller.Stop()
+	if c := s.controller.Load(); c != nil {
+		c.Stop()
 	}
 	if s.Cmd != nil && s.Cmd.Process != nil {
 		err := s.Cmd.Process.Kill()

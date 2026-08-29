@@ -9,6 +9,14 @@ import (
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 )
 
+type scrobbleAction int
+
+const (
+	scrobbleNone scrobbleAction = iota
+	scrobbleStart
+	scrobblePause
+)
+
 type Monitor struct {
 	client       *IPCClient
 	media        matcher.ParsedMedia
@@ -16,15 +24,16 @@ type Monitor struct {
 	socketPath   string
 	pollInterval time.Duration
 	stopCh       chan struct{}
+	stopOnce     sync.Once
 	wg           sync.WaitGroup
 
-	mu            sync.Mutex
-	started       bool
-	paused        bool
-	lastProgress  float64
-	lastTimePos   float64
-	duration      float64
-	onProgress    func(PlaybackProgress)
+	mu           sync.Mutex
+	started      bool
+	paused       bool
+	lastProgress float64
+	lastTimePos  float64
+	duration     float64
+	onProgress   func(PlaybackProgress)
 }
 
 func NewMonitor(client *IPCClient, media matcher.ParsedMedia, scrobbler ScrobbleHandler, socketPath string) *Monitor {
@@ -44,21 +53,21 @@ func (m *Monitor) SetProgressCallback(cb func(PlaybackProgress)) {
 	m.onProgress = cb
 }
 
-func (m *Monitor) Start() {
+func (m *Monitor) Start(ctx context.Context) {
 	m.wg.Add(1)
-	go m.run()
+	go m.run(ctx)
 }
 
-func (m *Monitor) run() {
+func (m *Monitor) run(ctx context.Context) {
 	defer m.wg.Done()
 	ticker := time.NewTicker(m.pollInterval)
 	defer ticker.Stop()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	for {
 		select {
+		case <-ctx.Done():
+			m.handleStop(ctx)
+			return
 		case <-m.stopCh:
 			m.handleStop(ctx)
 			return
@@ -79,8 +88,17 @@ func (m *Monitor) poll(ctx context.Context) {
 		return
 	}
 
-	dur, _ := m.client.GetFloatProperty(ctx, "duration")
 	paused, _ := m.client.GetBoolProperty(ctx, "pause")
+
+	m.mu.Lock()
+	dur := m.duration
+	m.mu.Unlock()
+
+	if dur <= 0 {
+		if d, err := m.client.GetFloatProperty(ctx, "duration"); err == nil {
+			dur = d
+		}
+	}
 
 	m.mu.Lock()
 	m.lastTimePos = timePos
@@ -92,23 +110,28 @@ func (m *Monitor) poll(ctx context.Context) {
 	m.paused = paused
 	progressCb := m.onProgress
 
+	action := scrobbleNone
 	if !m.started && timePos > 0 {
 		m.started = true
-		if m.scrobbler != nil {
-			_ = m.scrobbler.Start(ctx, m.media, percentPos)
-		}
+		action = scrobbleStart
 	} else if m.started {
 		if paused && !wasPaused {
-			if m.scrobbler != nil {
-				_ = m.scrobbler.Pause(ctx, m.media, percentPos)
-			}
+			action = scrobblePause
 		} else if !paused && wasPaused {
-			if m.scrobbler != nil {
-				_ = m.scrobbler.Start(ctx, m.media, percentPos)
-			}
+			action = scrobbleStart
 		}
 	}
 	m.mu.Unlock()
+
+	if m.scrobbler != nil {
+		switch action {
+		case scrobbleStart:
+			_ = m.scrobbler.Start(ctx, m.media, percentPos)
+		case scrobblePause:
+			_ = m.scrobbler.Pause(ctx, m.media, percentPos)
+		case scrobbleNone:
+		}
+	}
 
 	if progressCb != nil {
 		progressCb(PlaybackProgress{
@@ -127,7 +150,9 @@ func (m *Monitor) handleStop(ctx context.Context) {
 	m.mu.Unlock()
 
 	if started && m.scrobbler != nil {
-		_, _ = m.scrobbler.Stop(ctx, m.media, finalProg)
+		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		_, _ = m.scrobbler.Stop(stopCtx, m.media, finalProg)
+		cancel()
 	}
 
 	_ = m.client.Close()
@@ -137,13 +162,10 @@ func (m *Monitor) handleStop(ctx context.Context) {
 }
 
 func (m *Monitor) Stop() {
-	select {
-	case <-m.stopCh:
-		return
-	default:
+	m.stopOnce.Do(func() {
 		close(m.stopCh)
-		m.wg.Wait()
-	}
+	})
+	m.wg.Wait()
 }
 
 func (m *Monitor) GetLastProgress() float64 {

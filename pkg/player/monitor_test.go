@@ -70,11 +70,14 @@ func TestMonitor_ScrobbleLifecycle(t *testing.T) {
 	})
 	defer cleanup()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelDial()
 
-	client, err := player.DialIPC(ctx, sockPath, 2*time.Second)
+	client, err := player.DialIPC(dialCtx, sockPath, 2*time.Second)
 	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	scrobbler := &mockScrobbler{}
 	media := matcher.ParsedMedia{
@@ -93,7 +96,7 @@ func TestMonitor_ScrobbleLifecycle(t *testing.T) {
 		mu.Unlock()
 	})
 
-	monitor.Start()
+	monitor.Start(ctx)
 
 	time.Sleep(1200 * time.Millisecond)
 
