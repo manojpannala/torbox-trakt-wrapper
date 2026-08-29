@@ -3,8 +3,11 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -910,6 +913,51 @@ func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, p
 	}
 }
 
+const outputTailLimit = 8 << 10
+
+type outputTail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (w *outputTail) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf = append(w.buf, p...)
+	if len(w.buf) > outputTailLimit {
+		w.buf = w.buf[len(w.buf)-outputTailLimit:]
+	}
+	return len(p), nil
+}
+
+func (w *outputTail) errorLine() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var fallback string
+	for _, line := range strings.FieldsFunc(string(w.buf), func(r rune) bool {
+		return r == '\n' || r == '\r'
+	}) {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Exiting...") {
+			continue
+		}
+		if strings.Contains(strings.ToLower(line), "error") {
+			return truncateRunes(line, 100)
+		}
+		fallback = line
+	}
+	return truncateRunes(fallback, 100)
+}
+
+func truncateRunes(s string, limit int) string {
+	r := []rune(s)
+	if len(r) <= limit {
+		return s
+	}
+	return string(r[:limit-1]) + "\u2026"
+}
+
 func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 	var args []string
 	if msg.Title != "" {
@@ -926,10 +974,16 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 		exe = "mpv"
 	}
 	c := exec.Command(exe, args...)
+	tail := &outputTail{}
+	c.Stdout = io.MultiWriter(os.Stdout, tail)
+	c.Stderr = io.MultiWriter(os.Stderr, tail)
 
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		if err != nil {
-			return StatusMsg{Text: fmt.Sprintf("MPV playback ended with error: %v", err), IsErr: true}
+			if detail := tail.errorLine(); detail != "" {
+				return StatusMsg{Text: fmt.Sprintf("%s failed: %s", exe, detail), IsErr: true}
+			}
+			return StatusMsg{Text: fmt.Sprintf("%s playback ended with error: %v", exe, err), IsErr: true}
 		}
 		return StatusMsg{Text: "Playback finished", IsErr: false}
 	})
