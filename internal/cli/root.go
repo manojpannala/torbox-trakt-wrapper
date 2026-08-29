@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+	"github.com/manojpannala/torbox-trakt-wrapper/internal/tui"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 )
 
@@ -16,11 +18,10 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "tt-wrapper",
 	Short: "TorBox and Trakt streaming wrapper and manager",
-	Long:  "tt-wrapper is a fast terminal client and TUI for browsing and streaming TorBox cloud media with Trakt synchronization.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Launching torbox-trakt-wrapper...")
-		fmt.Println(cfg.String())
-		return nil
+		p := tea.NewProgram(tui.NewAppModel(cfg), tea.WithAltScreen())
+		_, err := p.Run()
+		return err
 	},
 }
 
