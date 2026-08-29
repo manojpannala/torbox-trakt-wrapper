@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -140,9 +141,14 @@ func NewClient(apiKey string, opts ...Option) *Client {
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
 
+	baseURL := DefaultBaseURL
+	if envURL := os.Getenv("TORBOX_BASE_URL"); envURL != "" {
+		baseURL = strings.TrimRight(envURL, "/")
+	}
+
 	c := &Client{
 		apiKey:  apiKey,
-		baseURL: DefaultBaseURL,
+		baseURL: baseURL,
 		httpClient: &http.Client{
 			Transport: transport,
 			Timeout:   DefaultTimeout,

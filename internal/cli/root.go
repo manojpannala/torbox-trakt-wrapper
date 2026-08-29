@@ -59,3 +59,7 @@ func GetConfig() *config.Config {
 	}
 	return cfg
 }
+
+func GetRootCommand() *cobra.Command {
+	return rootCmd
+}
