@@ -3,8 +3,9 @@ package tui_test
 import (
 	"testing"
 
-	"github.com/manojpannala/torbox-trakt-wrapper/internal/tui"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/internal/tui"
 )
 
 func TestTheme_Default(t *testing.T) {

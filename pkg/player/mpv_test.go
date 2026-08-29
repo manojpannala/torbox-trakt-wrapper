@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/player"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMPVPlayer_Options(t *testing.T) {

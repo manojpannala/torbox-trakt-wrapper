@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 )
 

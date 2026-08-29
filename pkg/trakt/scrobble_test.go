@@ -7,9 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
 
 const sampleScrobbleResponseJSON = `{

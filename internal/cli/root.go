@@ -5,9 +5,10 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
+
 	"github.com/manojpannala/torbox-trakt-wrapper/internal/tui"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
-	"github.com/spf13/cobra"
 )
 
 var (

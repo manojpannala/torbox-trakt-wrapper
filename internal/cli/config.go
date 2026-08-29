@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/spf13/cobra"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 )
 
 var configCmd = &cobra.Command{

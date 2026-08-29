@@ -3,11 +3,12 @@ package tui_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/manojpannala/torbox-trakt-wrapper/internal/tui"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestFileTree_NavigationAndRender(t *testing.T) {

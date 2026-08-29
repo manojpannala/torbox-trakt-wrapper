@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/manojpannala/torbox-trakt-wrapper/internal/tui"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAppModel_InitAndUpdate(t *testing.T) {

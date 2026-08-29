@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 )
 
 func TestClient_OptionsAndAuth(t *testing.T) {

@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/manojpannala/torbox-trakt-wrapper/internal/cli"
-	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/internal/cli"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 )
 
 func executeCommand(args ...string) (string, error) {

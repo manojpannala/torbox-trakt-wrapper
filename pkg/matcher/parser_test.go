@@ -3,8 +3,9 @@ package matcher_test
 import (
 	"testing"
 
-	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 )
 
 func TestParseMedia_ExhaustiveMatrix(t *testing.T) {
