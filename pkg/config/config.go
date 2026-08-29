@@ -142,7 +142,8 @@ func Load() (*Config, error) {
 func LoadFromFile(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
-	data, err := os.ReadFile(path)
+	cleanPath := filepath.Clean(path)
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			cfg.applyEnvOverrides()
