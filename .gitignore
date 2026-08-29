@@ -1,0 +1,30 @@
+# Project specific
+wrapper-tests/
+
+# Binaries
+bin/
+dist/
+/tt-wrapper
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.out
+*.test
+coverage.txt
+coverage.html
+
+# Editor / OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+/tmp/
