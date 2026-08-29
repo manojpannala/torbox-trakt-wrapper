@@ -30,6 +30,12 @@ type Config struct {
 	Trakt  TraktConfig  `toml:"trakt"`
 	Player PlayerConfig `toml:"player"`
 	UI     UIConfig     `toml:"ui"`
+
+	path string
+}
+
+func (c *Config) Path() string {
+	return c.path
 }
 
 type TorBoxConfig struct {
@@ -141,6 +147,7 @@ func Load() (*Config, error) {
 
 func LoadFromFile(path string) (*Config, error) {
 	cfg := DefaultConfig()
+	cfg.path = path
 
 	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
@@ -178,6 +185,9 @@ func (c *Config) applyEnvOverrides() {
 }
 
 func (c *Config) Save() error {
+	if c.path != "" {
+		return c.SaveToFile(c.path)
+	}
 	return c.SaveToFile(GetConfigFile())
 }
 
@@ -202,5 +212,10 @@ func (c *Config) SaveToFile(path string) error {
 		return fmt.Errorf("failed to atomically replace config file: %w", err)
 	}
 
-	return os.Chmod(path, FilePermission)
+	if err := os.Chmod(path, FilePermission); err != nil {
+		return err
+	}
+
+	c.path = path
+	return nil
 }

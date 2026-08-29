@@ -15,6 +15,8 @@ import (
 )
 
 func TestAppModel_InitAndUpdate(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	cfg := config.DefaultConfig()
 	cfg.TorBox.APIKey = "test-api-key"
 	cfg.Trakt.ClientID = "test-client-id"
@@ -177,6 +179,8 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 }
 
 func TestAppModel_FileTreeToggle(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	cfg := config.DefaultConfig()
 	app := tui.NewAppModel(cfg)
 

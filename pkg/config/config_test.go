@@ -119,3 +119,39 @@ func TestMaskSecretAndStringer(t *testing.T) {
 	assert.NotContains(t, str, "trakt_id_sample")
 	assert.Contains(t, str, "tb_...key")
 }
+
+func TestConfig_SaveWritesBackToLoadedPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
+
+	cfgPath := filepath.Join(dir, "custom.toml")
+	c := DefaultConfig()
+	c.Trakt.ClientID = "real-client-id"
+	require.NoError(t, c.SaveToFile(cfgPath))
+
+	loaded, err := LoadFromFile(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, cfgPath, loaded.Path())
+
+	loaded.Trakt.AccessToken = "token-from-auth"
+	require.NoError(t, loaded.Save())
+
+	reloaded, err := LoadFromFile(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, "token-from-auth", reloaded.Trakt.AccessToken)
+
+	_, err = os.Stat(GetConfigFile())
+	assert.True(t, os.IsNotExist(err), "Save() must not touch the default config location")
+}
+
+func TestConfig_SaveFallsBackToDefaultPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	c := DefaultConfig()
+	c.Trakt.ClientID = "from-defaults"
+	require.NoError(t, c.Save())
+
+	loaded, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, "from-defaults", loaded.Trakt.ClientID)
+}
