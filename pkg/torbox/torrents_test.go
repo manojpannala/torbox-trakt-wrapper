@@ -152,7 +152,7 @@ func TestTorrents_CreateTorrent_File(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/torrents/createtorrent", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Content-Type"), "multipart/form-data")
-		err := r.ParseMultipartForm(10 << 20)
+		err := r.ParseMultipartForm(10 << 20) // #nosec G120
 		require.NoError(t, err)
 		file, header, err := r.FormFile("file")
 		require.NoError(t, err)

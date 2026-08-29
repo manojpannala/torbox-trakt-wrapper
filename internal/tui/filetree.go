@@ -185,9 +185,10 @@ func (ft *FileTreeModel) Render(theme Theme, width, height int) string {
 		}
 
 		badgeStr := "   "
-		if item.Badge == "✓" {
+		switch item.Badge {
+		case "✓":
 			badgeStr = theme.BadgeWatched.Render(" ✓ ")
-		} else if item.Badge == "◐" {
+		case "◐":
 			badgeStr = theme.BadgeInProgress.Render(fmt.Sprintf("%2.0f%%", item.Progress))
 		}
 

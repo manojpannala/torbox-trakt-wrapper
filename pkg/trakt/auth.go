@@ -115,14 +115,13 @@ func (c *Client) PollDeviceToken(ctx context.Context, deviceCode string, interva
 			return tokens, nil
 		}
 
-		if err == ErrDeviceCodePending {
-			// Continue waiting
-		} else if err == ErrDeviceCodeSlowDown {
-			// Increase interval
+		switch {
+		case errors.Is(err, ErrDeviceCodePending):
+			// keep waiting
+		case errors.Is(err, ErrDeviceCodeSlowDown):
 			pollDuration += 2 * time.Second
 			ticker.Reset(pollDuration)
-		} else {
-			// Unrecoverable error (expired, denied, not found, etc.)
+		default:
 			return nil, err
 		}
 

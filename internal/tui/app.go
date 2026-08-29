@@ -103,9 +103,10 @@ func NewAppModel(cfg *config.Config) AppModel {
 	sp.Style = lipgloss.NewStyle().Foreground(ColorMauve)
 
 	initialTab := TabTorrents
-	if cfg.TorBox.DefaultCategory == "usenet" {
+	switch cfg.TorBox.DefaultCategory {
+	case "usenet":
 		initialTab = TabUsenet
-	} else if cfg.TorBox.DefaultCategory == "webdl" {
+	case "webdl":
 		initialTab = TabWebDL
 	}
 
@@ -726,9 +727,10 @@ func (m AppModel) renderLibraryList() string {
 		}
 
 		badgeStr := "   "
-		if item.TraktBadge == "✓" {
+		switch item.TraktBadge {
+		case "✓":
 			badgeStr = m.theme.BadgeWatched.Render(" ✓ ")
-		} else if item.TraktBadge == "◐" {
+		case "◐":
 			if item.TraktSummary != "" {
 				badgeStr = m.theme.BadgeInProgress.Render(item.TraktSummary)
 			} else {

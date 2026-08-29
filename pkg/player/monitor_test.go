@@ -48,9 +48,9 @@ func (m *mockScrobbler) Stop(ctx context.Context, media matcher.ParsedMedia, pro
 
 func TestMonitor_ScrobbleLifecycle(t *testing.T) {
 	var stateMu sync.RWMutex
-	var currentPos float64 = 10.0
-	var percentPos float64 = 5.0
-	var isPaused bool = false
+	var currentPos = 10.0
+	var percentPos = 5.0
+	var isPaused = false
 
 	sockPath, cleanup := startMockMPVSocket(t, func(cmd []interface{}) (interface{}, string) {
 		if len(cmd) >= 2 && cmd[0] == "get_property" {
