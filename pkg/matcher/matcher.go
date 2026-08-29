@@ -2,7 +2,6 @@ package matcher
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -10,16 +9,12 @@ import (
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
 
-var (
-	nonAlphanumericRegex = regexp.MustCompile(`[^a-z0-9\s]+`)
-	whitespaceRegex      = regexp.MustCompile(`\s+`)
-)
-
 type Matcher struct {
 	mu                sync.RWMutex
 	moviesByTitleYear map[string]*trakt.WatchedMovie
 	moviesByTitle     map[string][]*trakt.WatchedMovie
 	showsByTitle      map[string]*trakt.WatchedShow
+	showsByStripped   map[string]*trakt.WatchedShow
 	playbackByMovie   map[string]*trakt.PlaybackItem
 	playbackByEpisode map[string]*trakt.PlaybackItem
 	playbackByTraktID map[int]*trakt.PlaybackItem
@@ -38,6 +33,7 @@ func (m *Matcher) UpdateCatalog(movies []trakt.WatchedMovie, shows []trakt.Watch
 	m.moviesByTitleYear = make(map[string]*trakt.WatchedMovie, len(movies))
 	m.moviesByTitle = make(map[string][]*trakt.WatchedMovie, len(movies))
 	m.showsByTitle = make(map[string]*trakt.WatchedShow, len(shows))
+	m.showsByStripped = make(map[string]*trakt.WatchedShow, len(shows))
 	m.playbackByMovie = make(map[string]*trakt.PlaybackItem, len(playback))
 	m.playbackByEpisode = make(map[string]*trakt.PlaybackItem, len(playback))
 	m.playbackByTraktID = make(map[int]*trakt.PlaybackItem, len(playback))
@@ -64,6 +60,11 @@ func (m *Matcher) UpdateCatalog(movies []trakt.WatchedMovie, shows []trakt.Watch
 			continue
 		}
 		m.showsByTitle[normTitle] = show
+		if stripped := stripArticles(normTitle); stripped != "" {
+			if _, exists := m.showsByStripped[stripped]; !exists {
+				m.showsByStripped[stripped] = show
+			}
+		}
 	}
 
 	for i := range playback {
@@ -177,12 +178,7 @@ func (m *Matcher) matchMovie(result *MatchResult, normTitle string, parsed Parse
 func (m *Matcher) matchEpisode(result *MatchResult, normTitle string, parsed ParsedMedia) {
 	show, ok := m.showsByTitle[normTitle]
 	if !ok {
-		for k, s := range m.showsByTitle {
-			if stripArticles(k) == stripArticles(normTitle) {
-				show = s
-				break
-			}
-		}
+		show = m.showsByStripped[stripArticles(normTitle)]
 	}
 
 	if show != nil {
@@ -271,11 +267,32 @@ func AggregateFolderStatus(results []MatchResult) FolderStatus {
 }
 
 func NormalizeTitle(title string) string {
-	s := strings.ToLower(title)
-	s = strings.ReplaceAll(s, "&", " and ")
-	s = nonAlphanumericRegex.ReplaceAllString(s, " ")
-	s = whitespaceRegex.ReplaceAllString(s, " ")
-	return strings.TrimSpace(s)
+	var sb strings.Builder
+	sb.Grow(len(title))
+	space := true
+	for i := 0; i < len(title); i++ {
+		c := title[i]
+		switch {
+		case c >= 'A' && c <= 'Z':
+			sb.WriteByte(c + 'a' - 'A')
+			space = false
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+			sb.WriteByte(c)
+			space = false
+		case c == '&':
+			if !space {
+				sb.WriteByte(' ')
+			}
+			sb.WriteString("and ")
+			space = true
+		default:
+			if !space {
+				sb.WriteByte(' ')
+				space = true
+			}
+		}
+	}
+	return strings.TrimRight(sb.String(), " ")
 }
 
 func stripArticles(s string) string {

@@ -150,12 +150,7 @@ func ParseMedia(rawName string) ParsedMedia {
 	}
 
 	if parsed.Type == MediaTypeUnknown {
-		trimmed := bracketedTagRegex.ReplaceAllString(normalizedSpaced, " ")
-		trimmed = sceneTagsRegex.ReplaceAllString(trimmed, " ")
-		trimmed = resolutionRegex.ReplaceAllString(trimmed, " ")
-		trimmed = sourceRegex.ReplaceAllString(trimmed, " ")
-		trimmed = codecRegex.ReplaceAllString(trimmed, " ")
-		trimmed = audioRegex.ReplaceAllString(trimmed, " ")
+		trimmed := stripTags(normalizedSpaced, false)
 
 		if parts := strings.Split(trimmed, " - "); len(parts) >= 2 {
 			epCandidate := strings.TrimSpace(parts[len(parts)-1])
@@ -172,22 +167,9 @@ func ParseMedia(rawName string) ParsedMedia {
 	}
 
 	if parsed.CleanTitle == "" {
-		cleaned := normalizedSpaced
-		cleaned = bracketedTagRegex.ReplaceAllString(cleaned, " ")
-		cleaned = sceneTagsRegex.ReplaceAllString(cleaned, " ")
-		cleaned = resolutionRegex.ReplaceAllString(cleaned, " ")
-		cleaned = sourceRegex.ReplaceAllString(cleaned, " ")
-		cleaned = codecRegex.ReplaceAllString(cleaned, " ")
-		cleaned = audioRegex.ReplaceAllString(cleaned, " ")
-		cleaned = hdrRegex.ReplaceAllString(cleaned, " ")
-
-		parsed.CleanTitle = sanitizeTitle(cleaned)
+		parsed.CleanTitle = sanitizeTitle(normalizedSpaced)
 		if parsed.Type == MediaTypeUnknown {
-			if parsed.Year > 0 {
-				parsed.Type = MediaTypeMovie
-			} else {
-				parsed.Type = MediaTypeMovie
-			}
+			parsed.Type = MediaTypeMovie
 		}
 	}
 
@@ -211,17 +193,24 @@ func normalizeDelimiters(s string) string {
 	return sb.String()
 }
 
-func sanitizeTitle(title string) string {
-	s := strings.ReplaceAll(title, ".", " ")
-	s = strings.ReplaceAll(s, "_", " ")
-
+func stripTags(s string, includeHDR bool) string {
 	s = bracketedTagRegex.ReplaceAllString(s, " ")
 	s = sceneTagsRegex.ReplaceAllString(s, " ")
 	s = resolutionRegex.ReplaceAllString(s, " ")
 	s = sourceRegex.ReplaceAllString(s, " ")
 	s = codecRegex.ReplaceAllString(s, " ")
 	s = audioRegex.ReplaceAllString(s, " ")
-	s = hdrRegex.ReplaceAllString(s, " ")
+	if includeHDR {
+		s = hdrRegex.ReplaceAllString(s, " ")
+	}
+	return s
+}
+
+func sanitizeTitle(title string) string {
+	s := strings.ReplaceAll(title, ".", " ")
+	s = strings.ReplaceAll(s, "_", " ")
+
+	s = stripTags(s, true)
 
 	words := strings.Fields(s)
 	result := strings.Join(words, " ")
