@@ -26,7 +26,7 @@ builds:
       - -X github.com/manojpannala/torbox-trakt-wrapper/pkg/config.Date={{ .Date }}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -34,13 +34,36 @@ archives:
       {{- .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
+
+release:
+  header: |
+    A terminal wrapper around TorBox and Trakt.tv: browse your TorBox library
+    in a TUI, stream straight to mpv, and scrobble playback to Trakt as you watch.
+
+    ### Install
+
+    Download the archive for your platform below, extract it, and put `tt-wrapper`
+    on your `PATH`.
+
+    ### First run
+
+    ```
+    tt-wrapper config init
+    tt-wrapper auth torbox <your-torbox-api-key>
+    tt-wrapper auth trakt
+    tt-wrapper
+    ```
+
+    Trakt auth needs a Trakt application (https://trakt.tv/oauth/applications) with
+    its redirect URI set to `urn:ietf:wg:oauth:2.0:oob`; put the client ID and secret
+    in your config before running `auth trakt`.
 
 changelog:
   sort: asc
