@@ -102,9 +102,10 @@ func DefaultConfig() *Config {
 		Player: PlayerConfig{
 			Command: DefaultPlayerCommand,
 			Args: []string{
-				"--cache=yes",
-				"--demuxer-max-bytes=2GiB",
-				"--demuxer-max-back-bytes=512MiB",
+				"--force-seekable=yes",
+				"--resume-playback=no",
+				"--save-position-on-quit=no",
+				"--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_delay_max=30",
 			},
 			EnableIPC:                true,
 			ScrobbleThresholdPercent: DefaultScrobbleThreshold,

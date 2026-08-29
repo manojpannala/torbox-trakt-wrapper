@@ -104,6 +104,15 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if media.Stdin != nil {
+		cmd.Stdin = media.Stdin
+	}
+	if media.Stdout != nil {
+		cmd.Stdout = media.Stdout
+	}
+	if media.Stderr != nil {
+		cmd.Stderr = media.Stderr
+	}
 
 	if err := cmd.Start(); err != nil {
 		if socketPath != "" {

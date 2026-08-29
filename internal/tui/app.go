@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -958,27 +956,57 @@ func truncateRunes(s string, limit int) string {
 	return string(r[:limit-1]) + "\u2026"
 }
 
-func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
-	var args []string
-	if msg.Title != "" {
-		args = append(args, fmt.Sprintf("--force-media-title=%s", msg.Title))
-	}
-	if msg.ResumeSecs > 0 {
-		args = append(args, fmt.Sprintf("--start=%d", int(msg.ResumeSecs)))
-	}
-	args = append(args, m.cfg.Player.Args...)
-	args = append(args, msg.URL)
+type playerExec struct {
+	player player.Player
+	media  player.MediaStream
+	tail   *outputTail
+}
 
+func (e *playerExec) SetStdin(r io.Reader) {
+	e.media.Stdin = r
+}
+
+func (e *playerExec) SetStdout(w io.Writer) {
+	e.media.Stdout = io.MultiWriter(w, e.tail)
+}
+
+func (e *playerExec) SetStderr(w io.Writer) {
+	e.media.Stderr = io.MultiWriter(w, e.tail)
+}
+
+func (e *playerExec) Run() error {
+	session, err := e.player.Play(context.Background(), e.media)
+	if err != nil {
+		return err
+	}
+	return session.Wait()
+}
+
+func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 	exe := m.cfg.Player.Command
 	if exe == "" {
 		exe = "mpv"
 	}
-	c := exec.Command(exe, args...)
-	tail := &outputTail{}
-	c.Stdout = io.MultiWriter(os.Stdout, tail)
-	c.Stderr = io.MultiWriter(os.Stderr, tail)
 
-	return tea.ExecProcess(c, func(err error) tea.Msg {
+	if m.player == nil {
+		return func() tea.Msg {
+			return StatusMsg{Text: "No player configured", IsErr: true}
+		}
+	}
+
+	tail := &outputTail{}
+	e := &playerExec{
+		player: m.player,
+		tail:   tail,
+		media: player.MediaStream{
+			URL:        msg.URL,
+			Title:      msg.Title,
+			Parsed:     msg.Parsed,
+			ResumeSecs: msg.ResumeSecs,
+		},
+	}
+
+	return tea.Exec(e, func(err error) tea.Msg {
 		if err != nil {
 			if detail := tail.errorLine(); detail != "" {
 				return StatusMsg{Text: fmt.Sprintf("%s failed: %s", exe, detail), IsErr: true}

@@ -2,6 +2,7 @@ package player
 
 import (
 	"context"
+	"io"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -16,6 +17,10 @@ type MediaStream struct {
 	Parsed     matcher.ParsedMedia
 	ResumeSecs float64
 	ExtraArgs  []string
+
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 type PlaybackProgress struct {
