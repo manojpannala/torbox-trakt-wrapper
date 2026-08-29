@@ -67,7 +67,8 @@ release:
 
 changelog:
   sort: asc
-  use: github
+  use: git
+  abbrev: -1
   groups:
     - title: '🚀 Features'
       regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
