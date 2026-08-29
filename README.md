@@ -22,7 +22,7 @@ A high-performance terminal client and TUI for browsing, streaming, and managing
   - Modals for magnet adding (with clipboard auto-paste), deletion confirmation, Trakt pairing, and help cheat sheet.
 - **🧹 Intelligent Media Parser**:
   - Cleans release scene tags (`2160p`, `Remux`, `HEVC`, `DDP5.1`, `TrueHD`, `HDR`, `AV1`).
-  - Right-to-left reverse year extraction to avoid title collisions (*2001: A Space Odyssey*, *Blade Runner 2049*, *1917*).
+  - Right-to-left reverse year extraction, so titles that themselves contain or consist of a four-digit number still resolve to the correct release year.
   - Robust TV episode and season recognition (`S01E05`, `S01E01-E04`, `1x05`, anime flat notation).
 - **💻 Dual Interface**: Interactive Bubble Tea TUI or scriptable, headless CLI subcommands (`auth`, `list`, `add`, `stream`, `config`).
 - **🛡️ Privacy & Security**:
