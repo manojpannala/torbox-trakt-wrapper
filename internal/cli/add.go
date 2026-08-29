@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
+	"github.com/spf13/cobra"
 )
 
 var (

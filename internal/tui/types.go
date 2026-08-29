@@ -123,4 +123,3 @@ type StatusMsg struct {
 }
 
 type RefreshDataMsg struct{}
-

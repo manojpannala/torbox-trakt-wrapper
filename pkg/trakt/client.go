@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	DefaultBaseURL            = "https://api.trakt.tv"
-	DefaultAPIVersion         = "2"
-	DefaultTimeout            = 30 * time.Second
-	DefaultUserAgent          = "torbox-trakt-wrapper/0.1.0"
-	DefaultTokenExpiryBuffer  = 86400 // 24 hours in seconds
+	DefaultBaseURL           = "https://api.trakt.tv"
+	DefaultAPIVersion        = "2"
+	DefaultTimeout           = 30 * time.Second
+	DefaultUserAgent         = "torbox-trakt-wrapper/0.1.0"
+	DefaultTokenExpiryBuffer = 86400 // 24 hours in seconds
 )
 
 var (

@@ -51,7 +51,7 @@ type AppModel struct {
 	authModal AuthModal
 	fileTree  FileTreeModel
 
-	statusText string
+	statusText  string
 	isStatusErr bool
 }
 

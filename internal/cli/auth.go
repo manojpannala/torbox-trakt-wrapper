@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/atotto/clipboard"
-	"github.com/spf13/cobra"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
+	"github.com/spf13/cobra"
 )
 
 var authCmd = &cobra.Command{

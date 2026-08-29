@@ -281,6 +281,3 @@ func TestClient_APIErrorResponses(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Something went wrong")
 }
-
-
-

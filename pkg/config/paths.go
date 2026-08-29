@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	AppName       = "torbox-trakt-wrapper"
-	DirPermission = 0700
+	AppName        = "torbox-trakt-wrapper"
+	DirPermission  = 0700
 	FilePermission = 0600
 )
 

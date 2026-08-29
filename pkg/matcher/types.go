@@ -57,18 +57,18 @@ func (p ParsedMedia) DisplayTitle() string {
 }
 
 type MatchResult struct {
-	Parsed          ParsedMedia          `json:"parsed"`
-	Status          WatchStatus          `json:"status"`
-	Badge           string               `json:"badge"`
-	ProgressPercent float64              `json:"progress_percent"`
-	WatchedPlays    int                  `json:"watched_plays"`
-	TraktID         int                  `json:"trakt_id,omitempty"`
-	TraktTitle      string               `json:"trakt_title,omitempty"`
-	TraktYear       int                  `json:"trakt_year,omitempty"`
-	MatchedMovie    *trakt.WatchedMovie  `json:"matched_movie,omitempty"`
-	MatchedShow     *trakt.WatchedShow   `json:"matched_show,omitempty"`
-	MatchedEpisode  *trakt.WatchedEpisode`json:"matched_episode,omitempty"`
-	PlaybackID      int64                `json:"playback_id,omitempty"`
+	Parsed          ParsedMedia           `json:"parsed"`
+	Status          WatchStatus           `json:"status"`
+	Badge           string                `json:"badge"`
+	ProgressPercent float64               `json:"progress_percent"`
+	WatchedPlays    int                   `json:"watched_plays"`
+	TraktID         int                   `json:"trakt_id,omitempty"`
+	TraktTitle      string                `json:"trakt_title,omitempty"`
+	TraktYear       int                   `json:"trakt_year,omitempty"`
+	MatchedMovie    *trakt.WatchedMovie   `json:"matched_movie,omitempty"`
+	MatchedShow     *trakt.WatchedShow    `json:"matched_show,omitempty"`
+	MatchedEpisode  *trakt.WatchedEpisode `json:"matched_episode,omitempty"`
+	PlaybackID      int64                 `json:"playback_id,omitempty"`
 }
 
 type FolderStatus struct {

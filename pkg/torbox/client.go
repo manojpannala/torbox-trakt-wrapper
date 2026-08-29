@@ -198,7 +198,6 @@ func (c *Client) GetUser(ctx context.Context, settings bool) (*User, error) {
 	return &envelope.Data, nil
 }
 
-
 func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader, contentType string, target any) error {
 	url := fmt.Sprintf("%s%s", c.baseURL, path)
 
