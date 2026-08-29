@@ -242,7 +242,7 @@ func TestCLI_MalformedConfigFailsWithoutOverwriting(t *testing.T) {
 	require.Error(t, err, "a malformed config must not be silently ignored")
 	assert.Contains(t, err.Error(), cfgPath, "the error should name the offending file")
 
-	after, readErr := os.ReadFile(cfgPath)
+	after, readErr := os.ReadFile(cfgPath) // #nosec G304
 	require.NoError(t, readErr)
 	assert.Equal(t, broken, string(after), "the malformed config must be left untouched")
 }
