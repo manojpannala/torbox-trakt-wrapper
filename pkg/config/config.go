@@ -142,8 +142,7 @@ func Load() (*Config, error) {
 func LoadFromFile(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
-	cleanPath := filepath.Clean(path)
-	data, err := os.ReadFile(cleanPath)
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		if os.IsNotExist(err) {
 			cfg.applyEnvOverrides()

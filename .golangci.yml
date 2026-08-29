@@ -22,8 +22,7 @@ linters-settings:
       - fieldalignment
   gosec:
     excludes:
-      - G204
-      - G304
+      - G204 # Subprocess launched with variable (needed for player launcher)
   revive:
     rules:
       - name: exported
