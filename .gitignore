@@ -1,5 +1,6 @@
 # Project specific
 wrapper-tests/
+.gemini/
 
 # Binaries
 bin/
