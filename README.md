@@ -137,8 +137,9 @@ token_expires_in = 0
 [player]
 command = "mpv"
 args = [
-    "--vfs-cache-max-size=5G",
-    "--force-media-title=${TITLE}"
+    "--cache=yes",
+    "--demuxer-max-bytes=2GiB",
+    "--demuxer-max-back-bytes=512MiB"
 ]
 enable_ipc = true
 scrobble_threshold_percent = 90

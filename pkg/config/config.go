@@ -102,8 +102,9 @@ func DefaultConfig() *Config {
 		Player: PlayerConfig{
 			Command: DefaultPlayerCommand,
 			Args: []string{
-				"--vfs-cache-max-size=5G",
-				"--force-media-title=${TITLE}",
+				"--cache=yes",
+				"--demuxer-max-bytes=2GiB",
+				"--demuxer-max-back-bytes=512MiB",
 			},
 			EnableIPC:                true,
 			ScrobbleThresholdPercent: DefaultScrobbleThreshold,

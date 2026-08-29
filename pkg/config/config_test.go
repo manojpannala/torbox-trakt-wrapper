@@ -155,3 +155,9 @@ func TestConfig_SaveFallsBackToDefaultPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "from-defaults", loaded.Trakt.ClientID)
 }
+
+func TestDefaultConfig_PlayerArgsHaveNoUnexpandedPlaceholders(t *testing.T) {
+	for _, arg := range DefaultConfig().Player.Args {
+		assert.NotContains(t, arg, "${", "nothing expands placeholders in player args: %s", arg)
+	}
+}
