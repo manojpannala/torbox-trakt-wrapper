@@ -219,7 +219,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.retryWait * time.Duration(1<<uint(attempt-1))):
+			case <-time.After(c.retryWait * time.Duration(1<<(attempt-1))):
 			}
 		}
 

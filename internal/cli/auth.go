@@ -45,7 +45,7 @@ var authTraktCmd = &cobra.Command{
 		fmt.Printf("2. Enter pairing code:   %s\n", resp.UserCode)
 		fmt.Println("==================================================")
 
-		if err := clipboard.WriteAll(resp.UserCode); err == nil {
+		if clipErr := clipboard.WriteAll(resp.UserCode); clipErr == nil {
 			fmt.Println("(Copied code to clipboard)")
 		}
 

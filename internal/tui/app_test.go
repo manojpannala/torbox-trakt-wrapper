@@ -172,7 +172,7 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 			ExpiresIn:    7200,
 		},
 	})
-	appModel = m.(tui.AppModel)
+	_ = m.(tui.AppModel)
 }
 
 func TestAppModel_FileTreeToggle(t *testing.T) {
