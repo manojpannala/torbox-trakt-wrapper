@@ -14,11 +14,15 @@ import (
 var (
 	cfgFile string
 	cfg     *config.Config
+	cfgErr  error
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "tt-wrapper",
 	Short: "TorBox and Trakt streaming wrapper and manager",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return cfgErr
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p := tea.NewProgram(tui.NewAppModel(cfg), tea.WithAltScreen())
 		_, err := p.Run()
@@ -42,15 +46,13 @@ func init() {
 }
 
 func initConfig() {
-	var err error
 	if cfgFile != "" {
-		cfg, err = config.LoadFromFile(cfgFile)
+		cfg, cfgErr = config.LoadFromFile(cfgFile)
 	} else {
-		cfg, err = config.Load()
+		cfg, cfgErr = config.Load()
 	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to load config: %v\n", err)
-		cfg = config.DefaultConfig()
+	if cfgErr != nil {
+		cfg = nil
 	}
 }
 

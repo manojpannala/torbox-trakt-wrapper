@@ -226,3 +226,23 @@ func TestCLI_StreamNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no media found matching query")
 }
+
+func TestCLI_MalformedConfigFailsWithoutOverwriting(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cli-badcfg-test-*")
+	require.NoError(t, err)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
+
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	broken := "[torbox]\napi_key = 'keep-me'\ncache_ttl_minutes = 15`\n"
+	require.NoError(t, os.WriteFile(cfgPath, []byte(broken), 0o600))
+
+	_, err = executeCommand("--config", cfgPath, "config")
+	require.Error(t, err, "a malformed config must not be silently ignored")
+	assert.Contains(t, err.Error(), cfgPath, "the error should name the offending file")
+
+	after, readErr := os.ReadFile(cfgPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, broken, string(after), "the malformed config must be left untouched")
+}

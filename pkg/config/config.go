@@ -157,11 +157,11 @@ func LoadFromFile(path string) (*Config, error) {
 			cfg.applyEnvOverrides()
 			return cfg, nil
 		}
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)
 	}
 
 	if err := toml.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config TOML: %w", err)
+		return nil, fmt.Errorf("failed to parse config TOML at %s: %w", path, err)
 	}
 
 	cfg.applyEnvOverrides()
