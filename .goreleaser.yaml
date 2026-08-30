@@ -88,6 +88,12 @@ changelog:
     - title: '📝 Documentation'
       regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
       order: 5
+    - title: '📦 Build'
+      regexp: '^.*?build(\([[:word:]]+\))??!?:.+$'
+      order: 6
+    - title: '🔄 CI'
+      regexp: '^.*?ci(\([[:word:]]+\))??!?:.+$'
+      order: 7
     - title: 'Others'
       order: 999
   filters:
