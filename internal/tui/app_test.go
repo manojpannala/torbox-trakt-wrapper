@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -51,12 +51,12 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 	m, _ = appModel.Update(tui.TorrentsLoadedMsg{Torrents: torrents})
 	appModel = m.(tui.AppModel)
 
-	viewStr := appModel.View()
+	viewStr := appModel.View().Content
 	assert.Contains(t, viewStr, "TORBOX TRAKT WRAPPER")
 	assert.Contains(t, viewStr, "Test Movie Alpha")
 	assert.Contains(t, viewStr, "Test Series Beta")
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m, _ = appModel.Update(keyPress(tea.KeyTab))
 	appModel = m.(tui.AppModel)
 
 	m, _ = appModel.Update(tui.UsenetLoadedMsg{
@@ -71,9 +71,9 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 		},
 	})
 	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View(), "Test Usenet Gamma")
+	assert.Contains(t, appModel.View().Content, "Test Usenet Gamma")
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m, _ = appModel.Update(keyPress(tea.KeyTab))
 	appModel = m.(tui.AppModel)
 
 	m, _ = appModel.Update(tui.WebDLLoadedMsg{
@@ -88,53 +88,52 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 		},
 	})
 	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View(), "Test Delta")
+	assert.Contains(t, appModel.View().Content, "Test Delta")
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m, _ = appModel.Update(keyRune('1'))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m, _ = appModel.Update(keyRune('/'))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A', 'l', 'p', 'h', 'a'}})
-	appModel = m.(tui.AppModel)
-	viewStr = appModel.View()
+	appModel = typeRunes(t, appModel, "Alpha")
+	viewStr = appModel.View().Content
 	assert.Contains(t, viewStr, "Test Movie Alpha")
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = appModel.Update(keyPress(tea.KeyEsc))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m, _ = appModel.Update(keyRune('?'))
 	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View(), "Keyboard Shortcuts")
+	assert.Contains(t, appModel.View().Content, "Keyboard Shortcuts")
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	appModel = m.(tui.AppModel)
-
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View(), "Add Download")
-
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = appModel.Update(keyPress(tea.KeyEsc))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m, _ = appModel.Update(keyRune('a'))
 	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View(), "Confirm Deletion")
+	assert.Contains(t, appModel.View().Content, "Add Download")
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	appModel = m.(tui.AppModel)
-
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m, _ = appModel.Update(keyPress(tea.KeyEsc))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m, _ = appModel.Update(keyRune('d'))
+	appModel = m.(tui.AppModel)
+	assert.Contains(t, appModel.View().Content, "Confirm Deletion")
+
+	m, _ = appModel.Update(keyPress(tea.KeyEsc))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m, _ = appModel.Update(keyRune('j'))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m, _ = appModel.Update(keyRune('k'))
+	appModel = m.(tui.AppModel)
+
+	m, _ = appModel.Update(keyRune('G'))
+	appModel = m.(tui.AppModel)
+
+	m, _ = appModel.Update(keyRune('g'))
 	appModel = m.(tui.AppModel)
 
 	traktCatalog := tui.TraktCatalogLoadedMsg{
@@ -148,12 +147,12 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 	m, _ = appModel.Update(traktCatalog)
 	appModel = m.(tui.AppModel)
 
-	viewStr = appModel.View()
+	viewStr = appModel.View().Content
 	assert.Contains(t, viewStr, "✓")
 
 	m, _ = appModel.Update(tui.StatusMsg{Text: "Operation failed", IsErr: true})
 	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View(), "Operation failed")
+	assert.Contains(t, appModel.View().Content, "Operation failed")
 
 	m, _ = appModel.Update(tui.DeviceCodeGeneratedMsg{
 		Code: &trakt.DeviceCodeResponse{
@@ -205,17 +204,17 @@ func TestAppModel_FileTreeToggle(t *testing.T) {
 	m, _ = appModel.Update(tui.TorrentsLoadedMsg{Torrents: torrents})
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	m, _ = appModel.Update(keyRune('f'))
 	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View(), "Files:")
+	assert.Contains(t, appModel.View().Content, "Files:")
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	appModel = m.(tui.AppModel)
-
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m, _ = appModel.Update(keyRune('j'))
 	appModel = m.(tui.AppModel)
 
-	m, _ = appModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = appModel.Update(keyRune('k'))
 	appModel = m.(tui.AppModel)
-	assert.NotContains(t, appModel.View(), "Files:")
+
+	m, _ = appModel.Update(keyPress(tea.KeyEsc))
+	appModel = m.(tui.AppModel)
+	assert.NotContains(t, appModel.View().Content, "Files:")
 }

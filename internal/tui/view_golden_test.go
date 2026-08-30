@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -102,9 +102,19 @@ func step(t *testing.T, m tui.AppModel, msg tea.Msg) tui.AppModel {
 func typeRunes(t *testing.T, m tui.AppModel, s string) tui.AppModel {
 	t.Helper()
 	for _, r := range s {
-		m = step(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = step(t, m, keyRune(r))
 	}
 	return m
+}
+
+// keyRune builds the press of a printable key; keyPress builds a named one such
+// as tea.KeyEsc, which carries no text.
+func keyRune(r rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: r, Text: string(r)}
+}
+
+func keyPress(code rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: code}
 }
 
 func TestAppModel_ViewGolden(t *testing.T) {
@@ -174,7 +184,7 @@ func TestAppModel_ViewGolden(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ansiEscape.ReplaceAllString(tt.build(t).View(), "")
+			got := ansiEscape.ReplaceAllString(tt.build(t).View().Content, "")
 			path := filepath.Join("testdata", tt.name+".golden")
 
 			if *updateGolden {

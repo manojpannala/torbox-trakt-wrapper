@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/internal/tui"
@@ -29,7 +29,8 @@ var rootCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		p := tea.NewProgram(tui.NewAppModel(ctx, cfg), tea.WithAltScreen())
+		// The alt screen is set on the view itself; see tui.altScreenView.
+		p := tea.NewProgram(tui.NewAppModel(ctx, cfg))
 		_, err := p.Run()
 		return err
 	},

@@ -3,8 +3,8 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/lipgloss/v2"
 )
 
 type AddModal struct {
@@ -16,7 +16,7 @@ func NewAddModal() AddModal {
 	ti.Placeholder = "magnet:?xt=urn:btih:... or https://..."
 	ti.Focus()
 	ti.CharLimit = 2048
-	ti.Width = 50
+	ti.SetWidth(50)
 	return AddModal{Input: ti}
 }
 

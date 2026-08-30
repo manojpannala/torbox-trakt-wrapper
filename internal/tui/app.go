@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
@@ -101,7 +101,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config) AppModel {
 	ti := textinput.New()
 	ti.Placeholder = "Filter titles..."
 	ti.CharLimit = 128
-	ti.Width = 30
+	ti.SetWidth(30)
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -224,14 +224,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		playCmd := m.launchPlayerCmd(msg)
 		return m, playCmd
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKeyMsg(msg)
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
-func (m AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.searchActive {
 		switch msg.String() {
 		case "esc":
@@ -308,7 +308,7 @@ func (m AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			m.fileTree.MoveDown()
 			return m, nil
-		case "enter", " ":
+		case "enter", "space":
 			selected := m.fileTree.SelectedItem()
 			if selected != nil && m.fileTree.ParentItem != nil {
 				return m, m.streamFileCmd(m.fileTree.ParentItem, selected.ID, selected.CleanTitle, selected.Parsed)
@@ -431,7 +431,7 @@ func (m AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeModal = ModalAuth
 		return m, m.generateDeviceCodeCmd()
 
-	case "enter", " ":
+	case "enter", "space":
 		item := m.selectedCurrentItem()
 		if item != nil {
 			if len(item.TorrentFiles) > 1 || len(item.UsenetFiles) > 1 || len(item.WebDLFiles) > 1 {
@@ -610,9 +610,9 @@ func (m *AppModel) recalculateBadges() {
 	}
 }
 
-func (m AppModel) View() string {
+func (m AppModel) View() tea.View {
 	if m.width == 0 {
-		return "Initializing TorBox Trakt Wrapper..."
+		return altScreenView("Initializing TorBox Trakt Wrapper...")
 	}
 
 	var sb strings.Builder
@@ -650,7 +650,16 @@ func (m AppModel) View() string {
 	sb.WriteString(body)
 
 	footer := m.renderFooter()
-	return lipgloss.JoinVertical(lipgloss.Left, sb.String(), footer)
+	return altScreenView(lipgloss.JoinVertical(lipgloss.Left, sb.String(), footer))
+}
+
+// altScreenView keeps the alt-screen flag on every path out of View. Under
+// Bubble Tea v2 it is a property of the view, not a program option, so a
+// return that forgets it would render over the user's scrollback.
+func altScreenView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
 }
 
 func (m AppModel) renderHeader() string {

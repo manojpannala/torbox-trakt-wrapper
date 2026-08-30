@@ -10,22 +10,22 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                             ╭────────────────────────────────────────────────────────────╮                             
-                             │                                                            │                             
-                             │  Confirm Deletion                                          │                             
-                             │                                                            │                             
-                             │                                                            │                             
-                             │  Are you sure you want to remove:                          │                             
-                             │                                                            │                             
-                             │    Test Feature Alpha (2023)                               │                             
-                             │                                                            │                             
-                             │  This will delete the item from your TorBox cloud          │                             
-                             │  library.                                                  │                             
-                             │                                                            │                             
-                             │                                                            │                             
-                             │    [y] Delete       [n] Cancel                             │                             
-                             │                                                            │                             
-                             ╰────────────────────────────────────────────────────────────╯                             
+                              ╭──────────────────────────────────────────────────────────╮                              
+                              │                                                          │                              
+                              │  Confirm Deletion                                        │                              
+                              │                                                          │                              
+                              │                                                          │                              
+                              │  Are you sure you want to remove:                        │                              
+                              │                                                          │                              
+                              │    Test Feature Alpha (2023)                             │                              
+                              │                                                          │                              
+                              │  This will delete the item from your TorBox cloud        │                              
+                              │  library.                                                │                              
+                              │                                                          │                              
+                              │                                                          │                              
+                              │    [y] Delete       [n] Cancel                           │                              
+                              │                                                          │                              
+                              ╰──────────────────────────────────────────────────────────╯                              
                                                                                                                         
                                                                                                                         
                                                                                                                         
