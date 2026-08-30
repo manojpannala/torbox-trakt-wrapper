@@ -62,9 +62,9 @@ var listCmd = &cobra.Command{
 			movies, _ := trClient.GetWatchedMovies(ctx)
 			shows, _ := trClient.GetWatchedShows(ctx)
 			playback, _ := trClient.GetPlayback(ctx)
-			matcherEngine = matcher.NewMatcher(movies, shows, playback)
+			matcherEngine = matcher.NewMatcher(movies, shows, playback, matcher.WithScrobbleThreshold(c.Player.ScrobbleThresholdPercent))
 		} else {
-			matcherEngine = matcher.NewMatcher(nil, nil, nil)
+			matcherEngine = matcher.NewMatcher(nil, nil, nil, matcher.WithScrobbleThreshold(c.Player.ScrobbleThresholdPercent))
 		}
 
 		cat := "torrents"

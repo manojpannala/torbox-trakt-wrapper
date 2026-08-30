@@ -86,7 +86,7 @@ func NewAppModel(cfg *config.Config) AppModel {
 		)
 	}
 
-	matcherEngine := matcher.NewMatcher(nil, nil, nil)
+	matcherEngine := matcher.NewMatcher(nil, nil, nil, matcher.WithScrobbleThreshold(cfg.Player.ScrobbleThresholdPercent))
 	mpvPlayer := player.NewMPVPlayer(
 		player.WithExecutable(cfg.Player.Command),
 		player.WithExtraArgs(cfg.Player.Args),

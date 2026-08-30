@@ -9,6 +9,20 @@ import (
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
 
+const DefaultScrobbleThreshold = 90.0
+
+type Option func(*Matcher)
+
+// WithScrobbleThreshold sets the progress percentage at or above which an item
+// counts as watched rather than in progress. Out-of-range values are ignored.
+func WithScrobbleThreshold(percent int) Option {
+	return func(m *Matcher) {
+		if percent > 0 && percent <= 100 {
+			m.scrobbleThreshold = float64(percent)
+		}
+	}
+}
+
 type Matcher struct {
 	mu                sync.RWMutex
 	moviesByTitleYear map[string]*trakt.WatchedMovie
@@ -18,10 +32,15 @@ type Matcher struct {
 	playbackByMovie   map[string]*trakt.PlaybackItem
 	playbackByEpisode map[string]*trakt.PlaybackItem
 	playbackByTraktID map[int]*trakt.PlaybackItem
+
+	scrobbleThreshold float64
 }
 
-func NewMatcher(movies []trakt.WatchedMovie, shows []trakt.WatchedShow, playback []trakt.PlaybackItem) *Matcher {
-	m := &Matcher{}
+func NewMatcher(movies []trakt.WatchedMovie, shows []trakt.WatchedShow, playback []trakt.PlaybackItem, opts ...Option) *Matcher {
+	m := &Matcher{scrobbleThreshold: DefaultScrobbleThreshold}
+	for _, opt := range opts {
+		opt(m)
+	}
 	m.UpdateCatalog(movies, shows, playback)
 	return m
 }
@@ -162,7 +181,7 @@ func (m *Matcher) matchMovie(result *MatchResult, normTitle string, parsed Parse
 		pb = m.playbackByMovie[normTitle]
 	}
 
-	if pb != nil && pb.Progress > 0 && pb.Progress < 90 {
+	if pb != nil && pb.Progress > 0 && pb.Progress < m.scrobbleThreshold {
 		result.Status = StatusInProgress
 		result.Badge = "◐"
 		result.ProgressPercent = pb.Progress
@@ -213,7 +232,7 @@ func (m *Matcher) matchEpisode(result *MatchResult, normTitle string, parsed Par
 		seasonNum = 1
 	}
 	key := fmt.Sprintf("%s:%d:%d", normTitle, seasonNum, parsed.Episode)
-	if pb, ok := m.playbackByEpisode[key]; ok && pb.Progress > 0 && pb.Progress < 90 {
+	if pb, ok := m.playbackByEpisode[key]; ok && pb.Progress > 0 && pb.Progress < m.scrobbleThreshold {
 		result.Status = StatusInProgress
 		result.Badge = "◐"
 		result.ProgressPercent = pb.Progress

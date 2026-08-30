@@ -199,3 +199,46 @@ func TestMatcher_MatchTorrentFilesAndFolderAggregation(t *testing.T) {
 	assert.Equal(t, "✓", completeStatus.Badge)
 	assert.Equal(t, "[3/3]", completeStatus.Summary)
 }
+
+func TestMatcher_ScrobbleThreshold(t *testing.T) {
+	movies := []trakt.WatchedMovie{
+		{
+			Plays:         1,
+			LastWatchedAt: time.Now(),
+			Movie: trakt.Movie{
+				Title: "Test Feature Omega",
+				Year:  2021,
+				IDs:   trakt.IDs{Trakt: 700001},
+			},
+		},
+	}
+
+	playback := []trakt.PlaybackItem{
+		{
+			ID:       301,
+			Progress: 60.0,
+			Type:     "movie",
+			Movie: &trakt.Movie{
+				Title: "Test Feature Omega",
+				Year:  2021,
+				IDs:   trakt.IDs{Trakt: 700001},
+			},
+		},
+	}
+
+	name := "Test.Feature.Omega.2021.1080p.BluRay.mkv"
+
+	res := matcher.NewMatcher(movies, nil, playback).MatchFile(name)
+	assert.Equal(t, matcher.StatusInProgress, res.Status, "default threshold of 90 keeps 60 percent in progress")
+	assert.Equal(t, 60.0, res.ProgressPercent)
+
+	res = matcher.NewMatcher(movies, nil, playback, matcher.WithScrobbleThreshold(90)).MatchFile(name)
+	assert.Equal(t, matcher.StatusInProgress, res.Status)
+
+	res = matcher.NewMatcher(movies, nil, playback, matcher.WithScrobbleThreshold(50)).MatchFile(name)
+	assert.Equal(t, matcher.StatusWatched, res.Status, "a threshold of 50 counts 60 percent as watched")
+	assert.Equal(t, "✓", res.Badge)
+
+	res = matcher.NewMatcher(movies, nil, playback, matcher.WithScrobbleThreshold(0)).MatchFile(name)
+	assert.Equal(t, matcher.StatusInProgress, res.Status, "an out-of-range threshold falls back to the default")
+}
