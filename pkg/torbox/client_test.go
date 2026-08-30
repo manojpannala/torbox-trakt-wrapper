@@ -11,8 +11,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 )
+
+func TestClient_DefaultUserAgentTracksBuildVersion(t *testing.T) {
+	var capturedUA string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedUA = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"detail":"ok","data":[]}`))
+	}))
+	defer server.Close()
+
+	client := torbox.NewClient("test-key", torbox.WithBaseURL(server.URL))
+	_, err := client.GetTorrents(context.Background(), false)
+	require.NoError(t, err)
+
+	assert.Equal(t, "torbox-trakt-wrapper/"+config.Version, capturedUA)
+}
 
 func TestClient_OptionsAndAuth(t *testing.T) {
 	var capturedAuth string

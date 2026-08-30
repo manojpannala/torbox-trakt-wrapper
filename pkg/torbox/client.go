@@ -12,13 +12,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 )
 
 const (
-	DefaultBaseURL   = "https://api.torbox.app/v1/api"
-	DefaultTimeout   = 30 * time.Second
-	DefaultUserAgent = "torbox-trakt-wrapper/0.1.0"
+	DefaultBaseURL = "https://api.torbox.app/v1/api"
+	DefaultTimeout = 30 * time.Second
 )
+
+// DefaultUserAgent tracks the version stamped into the binary at build time.
+var DefaultUserAgent = "torbox-trakt-wrapper/" + config.Version
 
 var (
 	ErrUnauthorized = errors.New("torbox: unauthorized (invalid or missing API key)")

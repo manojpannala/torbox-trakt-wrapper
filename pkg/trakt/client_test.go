@@ -11,8 +11,34 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
+
+func TestClient_DefaultUserAgentTracksBuildVersion(t *testing.T) {
+	var capturedUA string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedUA = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	client := trakt.NewClient("test-client-id", "test-client-secret",
+		trakt.WithBaseURL(server.URL),
+		trakt.WithTokens(trakt.TokenResponse{
+			AccessToken: "valid-token",
+			ExpiresIn:   7776000,
+			CreatedAt:   time.Now().Unix(),
+		}),
+	)
+
+	_, err := client.GetWatchedMovies(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "torbox-trakt-wrapper/"+config.Version, capturedUA)
+}
 
 func TestClient_HeadersAndAuth(t *testing.T) {
 	var capturedAuth, capturedVersion, capturedAPIKey, capturedUA string

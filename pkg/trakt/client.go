@@ -11,15 +11,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 )
 
 const (
 	DefaultBaseURL           = "https://api.trakt.tv"
 	DefaultAPIVersion        = "2"
 	DefaultTimeout           = 30 * time.Second
-	DefaultUserAgent         = "torbox-trakt-wrapper/0.1.0"
 	DefaultTokenExpiryBuffer = 86400 // 24 hours in seconds
 )
+
+// DefaultUserAgent tracks the version stamped into the binary at build time.
+var DefaultUserAgent = "torbox-trakt-wrapper/" + config.Version
 
 var (
 	ErrUnauthorized          = errors.New("trakt: unauthorized")
