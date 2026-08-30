@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 var (
@@ -24,6 +25,11 @@ var (
 	hdrRegex              = regexp.MustCompile(`(?i)\b(hdr10\+|hdr10|hdr|dv|dovi|dolby\s*vision|hlg)\b`)
 	sceneTagsRegex        = regexp.MustCompile(`(?i)\b(proper|repack|extended|unrated|directors\.cut|director's\.cut|imax|multi|dual|complete|internal|subbed|dubbed|amzn|nf|dsnp|hmax|atvp|apple|criterion)\b`)
 	bracketedTagRegex     = regexp.MustCompile(`\[[a-zA-Z0-9_\-\.\s]+\]`)
+	sitePrefixRegex       = regexp.MustCompile(`(?i)^\s*www\.[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)+\s*(?:[-\x{2013}|:]\s*)?`)
+	fullWidthBannerRegex  = regexp.MustCompile(`\x{3010}[^\x{3011}]*\x{3011}`)
+	anyBracketedRegex     = regexp.MustCompile(`\[[^\]]*\]`)
+	latinRunRegex         = regexp.MustCompile(`[A-Za-z0-9][A-Za-z0-9'&:,.!?\- ]{2,}`)
+	trailingYearRegex     = regexp.MustCompile(`[\s._\-]\(?(19\d\d|20\d\d)\)?$`)
 )
 
 func ParseMedia(rawName string) ParsedMedia {
@@ -34,6 +40,7 @@ func ParseMedia(rawName string) ParsedMedia {
 
 	filename := filepath.Base(rawName)
 	clean := extRegex.ReplaceAllString(filename, "")
+	clean = stripSiteMarkers(clean)
 
 	if match := groupPrefixRegex.FindStringSubmatch(clean); len(match) > 1 {
 		groupCandidate := strings.TrimSpace(match[1])
@@ -166,6 +173,13 @@ func ParseMedia(rawName string) ParsedMedia {
 		}
 	}
 
+	if parsed.Type == MediaTypeEpisode && parsed.Year == 0 {
+		if title, year := splitTrailingYear(parsed.CleanTitle); year > 0 {
+			parsed.CleanTitle = title
+			parsed.Year = year
+		}
+	}
+
 	if parsed.CleanTitle == "" {
 		parsed.CleanTitle = sanitizeTitle(normalizedSpaced)
 		if parsed.Type == MediaTypeUnknown {
@@ -174,6 +188,81 @@ func ParseMedia(rawName string) ParsedMedia {
 	}
 
 	return parsed
+}
+
+// stripSiteMarkers removes the indexer decoration some uploaders prepend to a
+// filename: a leading host name, a full-width bracketed banner, and bracketed
+// tags written in a non-Latin script. The input is returned untouched when
+// stripping would leave nothing behind.
+func stripSiteMarkers(s string) string {
+	out := sitePrefixRegex.ReplaceAllString(s, "")
+	out = fullWidthBannerRegex.ReplaceAllString(out, " ")
+	out = anyBracketedRegex.ReplaceAllStringFunc(out, func(tag string) string {
+		if hasNonLatinScript(tag) {
+			return " "
+		}
+		return tag
+	})
+
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return s
+	}
+	return out
+}
+
+// splitTrailingYear pulls a release year off the end of a title, where it is
+// metadata rather than part of the name. Trakt stores the year separately, so
+// leaving it in the title costs a match.
+func splitTrailingYear(title string) (string, int) {
+	match := trailingYearRegex.FindStringSubmatch(title)
+	if match == nil {
+		return title, 0
+	}
+
+	year, err := strconv.Atoi(match[1])
+	if err != nil || year < 1900 || year > time.Now().Year()+2 {
+		return title, 0
+	}
+
+	remainder := strings.TrimSpace(strings.TrimSuffix(title, match[0]))
+	if remainder == "" {
+		return title, 0
+	}
+	return remainder, year
+}
+
+// preferLatinScript keeps the longest Latin run of a title that carries both an
+// original-script and a Latin name, a common dual-title convention. Titles with
+// no Latin run are left alone, so a single-script name survives intact.
+func preferLatinScript(title string) string {
+	if !hasNonLatinScript(title) {
+		return title
+	}
+
+	longest := ""
+	for _, run := range latinRunRegex.FindAllString(title, -1) {
+		run = strings.TrimSpace(run)
+		if len(run) > len(longest) {
+			longest = run
+		}
+	}
+	if longest == "" {
+		return title
+	}
+	return longest
+}
+
+func hasNonLatinScript(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) ||
+			unicode.Is(unicode.Hiragana, r) ||
+			unicode.Is(unicode.Katakana, r) ||
+			unicode.Is(unicode.Hangul, r) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeDelimiters(s string) string {
@@ -215,7 +304,7 @@ func sanitizeTitle(title string) string {
 	words := strings.Fields(s)
 	result := strings.Join(words, " ")
 	result = strings.Trim(result, " -_()[]{}")
-	return result
+	return preferLatinScript(result)
 }
 
 func normalizeTag(tag string) string {

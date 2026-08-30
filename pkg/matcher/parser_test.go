@@ -435,6 +435,79 @@ func TestParseMedia_ExhaustiveMatrix(t *testing.T) {
 			},
 			displayTitle: "Test Feature Phi (2023)",
 		},
+		{
+			name:     "site_prefixed_movie",
+			filename: "www.TestIndexer.org - Test Feature Chi (2019) 1080p BluRay x264 AAC.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "Test Feature Chi",
+				Type:       matcher.MediaTypeMovie,
+				Year:       2019,
+				Resolution: "1080p",
+				Source:     "bluray",
+				Codec:      "x264",
+				Audio:      "aac",
+			},
+			displayTitle: "Test Feature Chi (2019)",
+		},
+		{
+			name:     "site_prefixed_episode",
+			filename: "www.TestTracker.company - Test.Series.Chi.S02E05.1080p.WEB-DL.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "Test Series Chi",
+				Type:       matcher.MediaTypeEpisode,
+				Season:     2,
+				Episode:    5,
+				Resolution: "1080p",
+				Source:     "webdl",
+			},
+		},
+		{
+			name:     "full_width_banner_and_non_latin_tags",
+			filename: "【测试发布组 www.TestSite.com】测试剧集[第01集][简繁英字幕] Test Series Omega 2024 S01E01 1080p WEB-DL H265 AAC.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "Test Series Omega",
+				Type:       matcher.MediaTypeEpisode,
+				Year:       2024,
+				Season:     1,
+				Episode:    1,
+				Resolution: "1080p",
+				Source:     "webdl",
+			},
+		},
+		{
+			name:     "episode_with_trailing_year_in_title",
+			filename: "Test.Series.Psi.2019.S01E03.1080p.WEB-DL.x264.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "Test Series Psi",
+				Type:       matcher.MediaTypeEpisode,
+				Year:       2019,
+				Season:     1,
+				Episode:    3,
+				Resolution: "1080p",
+				Source:     "webdl",
+				Codec:      "x264",
+			},
+		},
+		{
+			name:     "non_latin_only_title_survives",
+			filename: "测试剧集.S01E01.1080p.WEB-DL.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "测试剧集",
+				Type:       matcher.MediaTypeEpisode,
+				Season:     1,
+				Episode:    1,
+				Resolution: "1080p",
+				Source:     "webdl",
+			},
+		},
+		{
+			name:     "host_only_name_keeps_the_raw_text",
+			filename: "www.TestIndexer.com.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "www TestIndexer com",
+				Type:       matcher.MediaTypeMovie,
+			},
+		},
 	}
 
 	for _, tc := range tests {
