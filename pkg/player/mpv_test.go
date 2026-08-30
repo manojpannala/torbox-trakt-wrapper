@@ -1,6 +1,7 @@
 package player_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -130,4 +131,28 @@ func TestTraktScrobbler_StartPauseStop(t *testing.T) {
 	}
 	err = scrobbler.Start(context.Background(), mediaEpisode, 5.0)
 	require.NoError(t, err)
+}
+
+func TestMPVPlayer_KeepOpenOverride(t *testing.T) {
+	run := func(keepOpen string) string {
+		p := player.NewMPVPlayer(
+			player.WithExecutable("echo"),
+			player.WithIPCEnabled(false),
+			player.WithKeepOpen(keepOpen),
+		)
+
+		var out bytes.Buffer
+		session, err := p.Play(context.Background(), player.MediaStream{
+			URL:    "https://example.com/stream.mkv",
+			Stdout: &out,
+		})
+		require.NoError(t, err)
+		require.NoError(t, session.Wait())
+		return out.String()
+	}
+
+	assert.Contains(t, run("no"), "--keep-open=no")
+	assert.Contains(t, run("always"), "--keep-open=always")
+	assert.NotContains(t, run(""), "--keep-open", "an unset value leaves mpv.conf alone")
+	assert.NotContains(t, run("maybe"), "--keep-open", "an invalid value leaves mpv.conf alone")
 }

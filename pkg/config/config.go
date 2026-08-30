@@ -76,6 +76,7 @@ type PlayerConfig struct {
 	Args                     []string `toml:"args"`
 	EnableIPC                bool     `toml:"enable_ipc"`
 	ScrobbleThresholdPercent int      `toml:"scrobble_threshold_percent"`
+	KeepOpen                 string   `toml:"keep_open"`
 }
 
 type UIConfig struct {
@@ -109,6 +110,7 @@ func DefaultConfig() *Config {
 			},
 			EnableIPC:                true,
 			ScrobbleThresholdPercent: DefaultScrobbleThreshold,
+			KeepOpen:                 "",
 		},
 		UI: UIConfig{
 			Theme:              DefaultUITheme,

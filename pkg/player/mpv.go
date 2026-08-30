@@ -41,6 +41,17 @@ func WithSocketDir(dir string) Option {
 	}
 }
 
+// WithKeepOpen overrides mpv's keep-open setting for the launch. Accepts
+// "yes", "no" or "always"; anything else leaves the user's mpv.conf alone.
+func WithKeepOpen(value string) Option {
+	return func(p *MPVPlayer) {
+		switch value {
+		case "yes", "no", "always":
+			p.keepOpen = value
+		}
+	}
+}
+
 func WithIPCEnabled(enabled bool) Option {
 	return func(p *MPVPlayer) {
 		p.ipcEnabled = enabled
@@ -52,6 +63,7 @@ type MPVPlayer struct {
 	extraArgs  []string
 	socketDir  string
 	ipcEnabled bool
+	keepOpen   string
 	scrobbler  ScrobbleHandler
 }
 
@@ -94,6 +106,10 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 
 	if media.ResumeSecs > 0 {
 		args = append(args, fmt.Sprintf("--start=%d", int(media.ResumeSecs)))
+	}
+
+	if p.keepOpen != "" {
+		args = append(args, fmt.Sprintf("--keep-open=%s", p.keepOpen))
 	}
 
 	args = append(args, p.extraArgs...)

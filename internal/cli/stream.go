@@ -104,6 +104,7 @@ var streamCmd = &cobra.Command{
 			player.WithExecutable(c.Player.Command),
 			player.WithExtraArgs(c.Player.Args),
 			player.WithIPCEnabled(c.Player.EnableIPC),
+			player.WithKeepOpen(c.Player.KeepOpen),
 			player.WithScrobbler(scrobbler),
 		)
 

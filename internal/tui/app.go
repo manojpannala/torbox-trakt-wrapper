@@ -94,6 +94,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config) AppModel {
 		player.WithExecutable(cfg.Player.Command),
 		player.WithExtraArgs(cfg.Player.Args),
 		player.WithIPCEnabled(cfg.Player.EnableIPC),
+		player.WithKeepOpen(cfg.Player.KeepOpen),
 		player.WithScrobbler(player.NewTraktScrobbler(trClient)),
 	)
 

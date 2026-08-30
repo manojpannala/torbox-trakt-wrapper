@@ -144,6 +144,7 @@ args = [
 ]
 enable_ipc = true
 scrobble_threshold_percent = 90
+keep_open = "" # "" leaves mpv.conf alone | "yes" | "no" | "always"
 
 [ui]
 theme = "catppuccin-mocha"
@@ -165,6 +166,14 @@ All settings can be overridden using environment variables:
 ## 🤝 MPV Integration & Custom Dotfiles
 
 `tt-wrapper` seamlessly cooperates with your custom `mpv` dotfiles (`mpv.conf`, custom Lua scripts, shaders, Vulkan/GPU pipelines, tone-mapping). It launches MPV with an isolated Unix IPC socket to monitor playback progress without altering your player keybindings or script states.
+
+### `keep-open` and deferred scrobbles
+
+If your `mpv.conf` sets `keep-open=always`, mpv does not exit at the end of a
+file. `tt-wrapper` waits for the player to exit before sending the final Trakt
+scrobble, so the watch is not recorded until you close mpv yourself. Set
+`keep_open = "no"` under `[player]` to append `--keep-open=no` for wrapper
+launches only, leaving your `mpv.conf` untouched for everything else.
 
 ---
 
