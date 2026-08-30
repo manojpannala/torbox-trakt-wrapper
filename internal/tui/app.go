@@ -22,6 +22,8 @@ import (
 )
 
 type AppModel struct {
+	ctx          context.Context
+	cancel       context.CancelFunc
 	cfg          *config.Config
 	torboxClient *torbox.Client
 	traktClient  *trakt.Client
@@ -57,8 +59,9 @@ type AppModel struct {
 	isStatusErr bool
 }
 
-func NewAppModel(cfg *config.Config) AppModel {
+func NewAppModel(ctx context.Context, cfg *config.Config) AppModel {
 	theme := DefaultTheme()
+	ctx, cancel := context.WithCancel(ctx)
 
 	var tbClient *torbox.Client
 	if cfg.TorBox.APIKey != "" {
@@ -112,6 +115,8 @@ func NewAppModel(cfg *config.Config) AppModel {
 	}
 
 	return AppModel{
+		ctx:          ctx,
+		cancel:       cancel,
 		cfg:          cfg,
 		torboxClient: tbClient,
 		traktClient:  trClient,
@@ -314,6 +319,7 @@ func (m AppModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "q", "ctrl+c":
+		m.cancel()
 		return m, tea.Quit
 
 	case "?":
@@ -957,6 +963,7 @@ func truncateRunes(s string, limit int) string {
 }
 
 type playerExec struct {
+	ctx    context.Context
 	player player.Player
 	media  player.MediaStream
 	tail   *outputTail
@@ -975,7 +982,7 @@ func (e *playerExec) SetStderr(w io.Writer) {
 }
 
 func (e *playerExec) Run() error {
-	session, err := e.player.Play(context.Background(), e.media)
+	session, err := e.player.Play(e.ctx, e.media)
 	if err != nil {
 		return err
 	}
@@ -996,6 +1003,7 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 
 	tail := &outputTail{}
 	e := &playerExec{
+		ctx:    m.ctx,
 		player: m.player,
 		tail:   tail,
 		media: player.MediaStream{

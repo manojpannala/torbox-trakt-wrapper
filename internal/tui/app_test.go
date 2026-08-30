@@ -1,6 +1,7 @@
 package tui_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 	cfg.Trakt.ClientID = "test-client-id"
 	cfg.Trakt.AccessToken = "test-access-token"
 
-	app := tui.NewAppModel(cfg)
+	app := tui.NewAppModel(context.Background(), cfg)
 	cmd := app.Init()
 	assert.NotNil(t, cmd)
 
@@ -182,7 +183,7 @@ func TestAppModel_FileTreeToggle(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	cfg := config.DefaultConfig()
-	app := tui.NewAppModel(cfg)
+	app := tui.NewAppModel(context.Background(), cfg)
 
 	m, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	appModel := m.(tui.AppModel)

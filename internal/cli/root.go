@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -24,7 +26,10 @@ var rootCmd = &cobra.Command{
 		return cfgErr
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p := tea.NewProgram(tui.NewAppModel(cfg), tea.WithAltScreen())
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		p := tea.NewProgram(tui.NewAppModel(ctx, cfg), tea.WithAltScreen())
 		_, err := p.Run()
 		return err
 	},
