@@ -41,7 +41,7 @@ func renderHelpModal(theme Theme, width int) string {
 	sb.WriteString("\n")
 	sb.WriteString(theme.ModalFocus.Render("Press Esc or ? to Close"))
 
-	return theme.ModalBox.Width(min(56, width-4)).Render(sb.String())
+	return theme.ModalBox.Width(min(58, width-2)).Render(sb.String())
 }
 
 func min(a, b int) int {

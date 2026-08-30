@@ -36,5 +36,5 @@ func (m AddModal) Render(theme Theme, width int) string {
 
 	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Left, confirmBtn, "  ", cancelBtn))
 
-	return theme.ModalBox.Width(min(64, width-4)).Render(sb.String())
+	return theme.ModalBox.Width(min(66, width-2)).Render(sb.String())
 }

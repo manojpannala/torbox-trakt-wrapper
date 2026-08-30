@@ -32,5 +32,5 @@ func renderDeleteModal(theme Theme, item *LibraryItem, width int) string {
 
 	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Left, confirmBtn, "  ", cancelBtn))
 
-	return theme.ModalBox.Width(min(60, width-4)).Render(sb.String())
+	return theme.ModalBox.Width(min(62, width-2)).Render(sb.String())
 }

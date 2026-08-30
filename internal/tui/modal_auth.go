@@ -34,7 +34,7 @@ func (m AuthModal) Render(theme Theme, width int) string {
 	if m.DeviceCode == nil {
 		sb.WriteString(m.Spinner.View())
 		sb.WriteString(" Generating device code...\n")
-		return theme.ModalBox.Width(min(60, width-4)).Render(sb.String())
+		return theme.ModalBox.Width(min(62, width-2)).Render(sb.String())
 	}
 
 	sb.WriteString(lipgloss.NewStyle().Foreground(ColorText).Render(
@@ -67,5 +67,5 @@ func (m AuthModal) Render(theme Theme, width int) string {
 	closeBtn := theme.ModalButton.Render("[Esc] Cancel")
 	sb.WriteString(closeBtn)
 
-	return theme.ModalBox.Width(min(60, width-4)).Render(sb.String())
+	return theme.ModalBox.Width(min(62, width-2)).Render(sb.String())
 }
