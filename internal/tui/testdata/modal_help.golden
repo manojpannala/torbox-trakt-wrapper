@@ -1,0 +1,38 @@
+  TORBOX TRAKT WRAPPER                                                                             Trakt: [Connected ✓] 
+  [1] Torrents    [2] Usenet    [3] Web-DL                                                                              
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                               ╭────────────────────────────────────────────────────────╮                               
+                               │                                                        │                               
+                               │  Keyboard Shortcuts                                    │                               
+                               │                                                        │                               
+                               │                                                        │                               
+                               │  Enter / Space   Stream media with MPV                 │                               
+                               │  Tab / 1,2,3     Switch tabs (Torrents / Usenet /      │                               
+                               │  Web-DL)                                               │                               
+                               │  f / o           Open file tree / folder browser       │                               
+                               │  /               Search / filter library list          │                               
+                               │  Esc             Clear search / close modal / back     │                               
+                               │  a               Add new torrent (Magnet / URL)        │                               
+                               │  d / x           Delete selected item                  │                               
+                               │  r               Refresh library and Trakt history     │                               
+                               │  p               Pause / resume active torrent         │                               
+                               │  A               Authenticate Trakt (Device Flow)      │                               
+                               │  ?               Toggle this help overlay              │                               
+                               │  q / Ctrl+C      Quit application                      │                               
+                               │                                                        │                               
+                               │                                                        │                               
+                               │    Press Esc or ? to Close                             │                               
+                               │                                                        │                               
+                               ╰────────────────────────────────────────────────────────╯                               
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+ Ready        [Tab] Switch  [Enter] Stream  [f] Files  [/] Filter  [a] Add  [d] Delete  [A] Trakt  [?] Help  [q] Quit   
