@@ -770,7 +770,7 @@ func (m AppModel) renderLibraryList() string {
 			titleStyle = m.theme.ItemSelected
 		}
 
-		renderedTitle := titleStyle.Render(title)
+		renderedTitle := titleStyle.Render(fmt.Sprintf("%-50s", title))
 		renderedSize := m.theme.ItemSize.Render(fmt.Sprintf("%9s", item.FormattedSize))
 
 		statusStr := item.DownloadState
@@ -779,7 +779,7 @@ func (m AppModel) renderLibraryList() string {
 		}
 		renderedStatus := m.theme.ItemStatusOk.Render(fmt.Sprintf("%-10s", statusStr))
 
-		line := fmt.Sprintf("%s%s %-50s  %s  %s", cursorStr, badgeStr, renderedTitle, renderedSize, renderedStatus)
+		line := fmt.Sprintf("%s%s %s  %s  %s", cursorStr, badgeStr, renderedTitle, renderedSize, renderedStatus)
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}

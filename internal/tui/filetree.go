@@ -207,10 +207,10 @@ func (ft *FileTreeModel) Render(theme Theme, width, height int) string {
 			titleStyle = theme.ItemSelected
 		}
 
-		renderedTitle := titleStyle.Render(title)
+		renderedTitle := titleStyle.Render(fmt.Sprintf("%-50s", title))
 		renderedSize := theme.ItemSize.Render(item.FormattedSize)
 
-		line := fmt.Sprintf("%s%s %-50s  %s", cursorStr, badgeStr, renderedTitle, renderedSize)
+		line := fmt.Sprintf("%s%s %s  %s", cursorStr, badgeStr, renderedTitle, renderedSize)
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
