@@ -99,4 +99,4 @@ changelog:
   filters:
     exclude:
       - '^typo'
-      - '^test:'
+      - '^test(\([[:word:]]+\))??!?:.+$'
