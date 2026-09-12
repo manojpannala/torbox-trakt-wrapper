@@ -46,7 +46,7 @@ func TestPlayerExec_PassesMediaThroughToThePlayer(t *testing.T) {
 		media: player.MediaStream{
 			URL:        "https://example.invalid/a.mkv",
 			Title:      "Some Show",
-			ResumeSecs: 42,
+			ResumeAtPercent: 42,
 		},
 	}
 	e.SetStdout(io.Discard)
@@ -56,7 +56,7 @@ func TestPlayerExec_PassesMediaThroughToThePlayer(t *testing.T) {
 
 	assert.Equal(t, "https://example.invalid/a.mkv", fp.got.URL)
 	assert.Equal(t, "Some Show", fp.got.Title)
-	assert.Equal(t, float64(42), fp.got.ResumeSecs)
+	assert.Equal(t, float64(42), fp.got.ResumeAtPercent)
 	assert.NotNil(t, fp.got.Stdout, "player must receive the tee'd stdout")
 	assert.NotNil(t, fp.got.Stderr, "player must receive the tee'd stderr")
 }

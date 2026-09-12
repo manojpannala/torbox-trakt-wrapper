@@ -102,7 +102,7 @@ type StreamURLResolvedMsg struct {
 	URL        string
 	Title      string
 	Parsed     matcher.ParsedMedia
-	ResumeSecs float64
+	ResumeAtPercent float64
 }
 
 type DeviceCodeGeneratedMsg struct {

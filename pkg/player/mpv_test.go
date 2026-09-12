@@ -55,7 +55,7 @@ func TestMPVPlayer_PlayAndSessionLifecycle(t *testing.T) {
 	stream := player.MediaStream{
 		URL:        "https://example.com/stream.mkv",
 		Title:      "Test Movie Alpha",
-		ResumeSecs: 120,
+		ResumeAtPercent: 41,
 	}
 
 	session, err := p.Play(ctx, stream)

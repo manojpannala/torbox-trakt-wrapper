@@ -15,7 +15,7 @@ type MediaStream struct {
 	URL        string
 	Title      string
 	Parsed     matcher.ParsedMedia
-	ResumeSecs float64
+	ResumeAtPercent float64
 	ExtraArgs  []string
 
 	Stdin  io.Reader

@@ -104,8 +104,8 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 		args = append(args, fmt.Sprintf("--input-ipc-server=%s", socketPath))
 	}
 
-	if media.ResumeSecs > 0 {
-		args = append(args, fmt.Sprintf("--start=%d", int(media.ResumeSecs)))
+	if media.ResumeAtPercent > 0 {
+		args = append(args, fmt.Sprintf("--start=%.1f%%", media.ResumeAtPercent))
 	}
 
 	if p.keepOpen != "" {

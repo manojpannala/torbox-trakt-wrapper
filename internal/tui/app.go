@@ -893,9 +893,16 @@ func (m AppModel) streamItemCmd(item *LibraryItem) tea.Cmd {
 			URL:        link,
 			Title:      item.CleanTitle,
 			Parsed:     item.Parsed,
-			ResumeSecs: item.TraktProgress,
+			ResumeAtPercent: item.TraktProgress,
 		}
 	}
+}
+
+func (m AppModel) resumePercentFor(parsed matcher.ParsedMedia) float64 {
+	if m.matcher == nil {
+		return 0
+	}
+	return m.matcher.MatchParsed(parsed).ProgressPercent
 }
 
 func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, parsed matcher.ParsedMedia) tea.Cmd {
@@ -923,9 +930,10 @@ func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, p
 		}
 
 		return StreamURLResolvedMsg{
-			URL:    link,
-			Title:  title,
-			Parsed: parsed,
+			URL:             link,
+			Title:           title,
+			Parsed:          parsed,
+			ResumeAtPercent: m.resumePercentFor(parsed),
 		}
 	}
 }
@@ -1023,7 +1031,7 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 			URL:        msg.URL,
 			Title:      msg.Title,
 			Parsed:     msg.Parsed,
-			ResumeSecs: msg.ResumeSecs,
+			ResumeAtPercent: msg.ResumeAtPercent,
 		},
 	}
 
