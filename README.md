@@ -115,6 +115,29 @@ tt-wrapper config path
 tt-wrapper config init
 ```
 
+### Global flags
+
+| Flag | Effect |
+| --- | --- |
+| <kbd>-c</kbd>, `--config <path>` | Use a specific config file |
+| <kbd>-v</kbd>, `--verbose` | Write a debug log (see below) |
+
+### Debug logging
+
+`--verbose` works on every command, including the TUI, and appends to:
+
+```
+$XDG_STATE_HOME/torbox-trakt-wrapper/tt-wrapper.log   # ~/.local/state/... by default
+```
+
+The file is created at `0600` and only when `--verbose` is passed — a normal run
+writes nothing. It records API requests (method, path, status, duration), the
+flags `mpv` was launched with, and scrobble decisions.
+
+API keys and tokens are never written: credentials travel in headers rather than
+URLs, request bodies and headers are never logged, and the signed stream URL is
+reduced to its host. Attach it to a bug report as-is.
+
 ---
 
 ## ⚙️ Configuration
