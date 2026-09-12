@@ -21,14 +21,14 @@ func capturedArgs(t *testing.T, media player.MediaStream) []string {
 	argsFile := filepath.Join(dir, "argv")
 	stub := filepath.Join(dir, "fake-mpv")
 	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$@\" > '%s'\n", argsFile)
-	require.NoError(t, os.WriteFile(stub, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(stub, []byte(script), 0o755)) // #nosec G306 -- the stub must be executable
 
 	p := player.NewMPVPlayer(player.WithExecutable(stub), player.WithIPCEnabled(false))
 	session, err := p.Play(context.Background(), media)
 	require.NoError(t, err)
 	require.NoError(t, session.Wait())
 
-	raw, err := os.ReadFile(argsFile)
+	raw, err := os.ReadFile(argsFile) // #nosec G304
 	require.NoError(t, err)
 	return strings.Split(strings.TrimSpace(string(raw)), "\n")
 }

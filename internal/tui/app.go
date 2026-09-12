@@ -901,9 +901,9 @@ func (m AppModel) streamItemCmd(item *LibraryItem) tea.Cmd {
 		}
 
 		return StreamURLResolvedMsg{
-			URL:        link,
-			Title:      item.CleanTitle,
-			Parsed:     item.Parsed,
+			URL:             link,
+			Title:           item.CleanTitle,
+			Parsed:          item.Parsed,
 			ResumeAtPercent: item.TraktProgress,
 		}
 	}
@@ -1098,9 +1098,9 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 		player: m.player,
 		tail:   tail,
 		media: player.MediaStream{
-			URL:        msg.URL,
-			Title:      msg.Title,
-			Parsed:     msg.Parsed,
+			URL:             msg.URL,
+			Title:           msg.Title,
+			Parsed:          msg.Parsed,
 			ResumeAtPercent: msg.ResumeAtPercent,
 		},
 	}

@@ -12,11 +12,11 @@ import (
 )
 
 type MediaStream struct {
-	URL        string
-	Title      string
-	Parsed     matcher.ParsedMedia
+	URL             string
+	Title           string
+	Parsed          matcher.ParsedMedia
 	ResumeAtPercent float64
-	ExtraArgs  []string
+	ExtraArgs       []string
 
 	Stdin  io.Reader
 	Stdout io.Writer

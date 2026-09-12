@@ -105,9 +105,9 @@ type PlaybackFinishedMsg struct {
 }
 
 type StreamURLResolvedMsg struct {
-	URL        string
-	Title      string
-	Parsed     matcher.ParsedMedia
+	URL             string
+	Title           string
+	Parsed          matcher.ParsedMedia
 	ResumeAtPercent float64
 }
 

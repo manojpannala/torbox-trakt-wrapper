@@ -53,8 +53,8 @@ func TestMPVPlayer_PlayAndSessionLifecycle(t *testing.T) {
 	defer cancel()
 
 	stream := player.MediaStream{
-		URL:        "https://example.com/stream.mkv",
-		Title:      "Test Movie Alpha",
+		URL:             "https://example.com/stream.mkv",
+		Title:           "Test Movie Alpha",
 		ResumeAtPercent: 41,
 	}
 

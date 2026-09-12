@@ -44,8 +44,8 @@ func TestPlayerExec_PassesMediaThroughToThePlayer(t *testing.T) {
 		player: fp,
 		tail:   tail,
 		media: player.MediaStream{
-			URL:        "https://example.invalid/a.mkv",
-			Title:      "Some Show",
+			URL:             "https://example.invalid/a.mkv",
+			Title:           "Some Show",
 			ResumeAtPercent: 42,
 		},
 	}
