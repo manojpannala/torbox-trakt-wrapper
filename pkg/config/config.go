@@ -10,12 +10,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-var (
-	Version = "dev"
-	Commit  = "none"
-	Date    = "unknown"
-)
-
 const (
 	DefaultTorBoxCategory     = "torrents"
 	DefaultCacheTTLMinutes    = 15
