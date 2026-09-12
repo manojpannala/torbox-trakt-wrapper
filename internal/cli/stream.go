@@ -98,7 +98,7 @@ var streamCmd = &cobra.Command{
 
 		var scrobbler player.ScrobbleHandler
 		if trClient != nil && c.Trakt.HasAuth() {
-			scrobbler = player.NewTraktScrobbler(trClient)
+			scrobbler = player.NewTraktScrobbler(trClient, player.WithScrobblerLogger(logger))
 		}
 
 		mpv := player.NewMPVPlayer(

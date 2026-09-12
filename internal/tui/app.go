@@ -113,13 +113,18 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		)
 	}
 
+	var scrobbler player.ScrobbleHandler
+	if trClient != nil && cfg.Trakt.HasAuth() {
+		scrobbler = player.NewTraktScrobbler(trClient, player.WithScrobblerLogger(logger))
+	}
+
 	matcherEngine := matcher.NewMatcher(nil, nil, nil, matcher.WithScrobbleThreshold(cfg.Player.ScrobbleThresholdPercent))
 	mpvPlayer := player.NewMPVPlayer(
 		player.WithExecutable(cfg.Player.Command),
 		player.WithExtraArgs(cfg.Player.Args),
 		player.WithIPCEnabled(cfg.Player.EnableIPC),
 		player.WithKeepOpen(cfg.Player.KeepOpen),
-		player.WithScrobbler(player.NewTraktScrobbler(trClient)),
+		player.WithScrobbler(scrobbler),
 		player.WithLogger(logger),
 	)
 
