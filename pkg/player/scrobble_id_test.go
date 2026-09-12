@@ -119,3 +119,19 @@ func TestScrobbler_FallsBackToTitleWhenSearchFindsNothing(t *testing.T) {
 	movie := stub.scrobbleBody["movie"].(map[string]any)
 	assert.Equal(t, "Vishwanath and Sons", movie["title"], "behaviour must be no worse than before")
 }
+
+// A fresh install has no Trakt client id, so NewAppModel builds the scrobbler
+// around a nil client. Playing anything then panicked in the monitor
+// goroutine, taking the whole TUI with it.
+func TestScrobbler_WithoutATraktClientIsANoOp(t *testing.T) {
+	s := player.NewTraktScrobbler(nil)
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		assert.NoError(t, s.Start(ctx, vishwanath(), 1))
+		assert.NoError(t, s.Pause(ctx, vishwanath(), 40))
+		resp, err := s.Stop(ctx, vishwanath(), 90)
+		assert.NoError(t, err)
+		assert.Nil(t, resp)
+	})
+}

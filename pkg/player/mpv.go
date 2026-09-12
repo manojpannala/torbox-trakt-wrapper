@@ -211,6 +211,9 @@ func NewTraktScrobbler(client *trakt.Client) *TraktScrobbler {
 }
 
 func (s *TraktScrobbler) Start(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
+	if s.client == nil {
+		return nil
+	}
 
 	req := s.buildScrobbleRequest(ctx, media, progress)
 	_, err := s.client.StartScrobble(ctx, req)
@@ -218,6 +221,9 @@ func (s *TraktScrobbler) Start(ctx context.Context, media matcher.ParsedMedia, p
 }
 
 func (s *TraktScrobbler) Pause(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
+	if s.client == nil {
+		return nil
+	}
 
 	req := s.buildScrobbleRequest(ctx, media, progress)
 	_, err := s.client.PauseScrobble(ctx, req)
@@ -225,6 +231,9 @@ func (s *TraktScrobbler) Pause(ctx context.Context, media matcher.ParsedMedia, p
 }
 
 func (s *TraktScrobbler) Stop(ctx context.Context, media matcher.ParsedMedia, progress float64) (*trakt.ScrobbleResponse, error) {
+	if s.client == nil {
+		return nil, nil
+	}
 
 	req := s.buildScrobbleRequest(ctx, media, progress)
 	return s.client.StopScrobble(ctx, req)
