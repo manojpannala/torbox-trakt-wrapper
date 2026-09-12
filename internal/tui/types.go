@@ -44,6 +44,7 @@ const (
 	ModalAdd
 	ModalDelete
 	ModalHelp
+	ModalResume
 )
 
 type LibraryItem struct {

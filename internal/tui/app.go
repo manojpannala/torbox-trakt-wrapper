@@ -23,6 +23,7 @@ import (
 )
 
 type AppModel struct {
+	resumePrompt *pendingResume
 	ctx          context.Context
 	cancel       context.CancelFunc
 	cfg          *config.Config
@@ -290,6 +291,27 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case ModalResume:
+			p := m.resumePrompt
+			switch msg.String() {
+			case "r", "R", "enter":
+				m.activeModal, m.resumePrompt = ModalNone, nil
+				if p != nil {
+					return m, p.play(p.percent)
+				}
+				return m, nil
+			case "s", "S":
+				m.activeModal, m.resumePrompt = ModalNone, nil
+				if p != nil {
+					return m, p.play(0)
+				}
+				return m, nil
+			case "esc", "q":
+				m.activeModal, m.resumePrompt = ModalNone, nil
+				return m, nil
+			}
+			return m, nil
+
 		case ModalDelete:
 			switch msg.String() {
 			case "y", "Y", "enter":
@@ -341,7 +363,11 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "enter", "space":
 			selected := m.fileTree.SelectedItem()
 			if selected != nil && m.fileTree.ParentItem != nil {
-				return m, m.streamFileCmd(m.fileTree.ParentItem, selected.ID, selected.CleanTitle, selected.Parsed)
+				parent, fileID := m.fileTree.ParentItem, selected.ID
+				title, parsed := selected.CleanTitle, selected.Parsed
+				return m, m.beginStream(title, parsed, func(p float64) tea.Cmd {
+					return m.streamFileCmd(parent, fileID, title, parsed, p)
+				})
 			}
 			return m, nil
 		}
@@ -474,7 +500,9 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.activeView = ViewFileTree
 				return m, nil
 			}
-			return m, m.streamItemCmd(item)
+			return m, m.beginStream(item.CleanTitle, item.Parsed, func(p float64) tea.Cmd {
+				return m.streamItemCmd(item, p)
+			})
 		}
 	}
 
@@ -673,6 +701,8 @@ func (m AppModel) View() tea.View {
 		switch m.activeModal {
 		case ModalHelp:
 			modalView = renderHelpModal(m.theme, m.width)
+		case ModalResume:
+			modalView = renderResumeModal(m.theme, m.resumePrompt, m.width)
 		case ModalDelete:
 			modalView = renderDeleteModal(m.theme, m.selectedCurrentItem(), m.width)
 		case ModalAdd:
@@ -895,7 +925,7 @@ func (m AppModel) fetchTraktCatalogCmd() tea.Cmd {
 	}
 }
 
-func (m AppModel) streamItemCmd(item *LibraryItem) tea.Cmd {
+func (m AppModel) streamItemCmd(item *LibraryItem, resumePercent float64) tea.Cmd {
 	return func() tea.Msg {
 		if m.torboxClient == nil {
 			return StatusMsg{Text: "TorBox API key not configured", IsErr: true}
@@ -928,19 +958,32 @@ func (m AppModel) streamItemCmd(item *LibraryItem) tea.Cmd {
 			URL:             link,
 			Title:           item.CleanTitle,
 			Parsed:          item.Parsed,
-			ResumeAtPercent: item.TraktProgress,
+			ResumeAtPercent: resumePercent,
 		}
 	}
 }
 
-func (m AppModel) resumePercentFor(parsed matcher.ParsedMedia) float64 {
-	if m.matcher == nil {
-		return 0
+// beginStream prompts when Trakt has a position, and plays straight away when
+// it does not.
+func (m *AppModel) beginStream(title string, parsed matcher.ParsedMedia, play func(float64) tea.Cmd) tea.Cmd {
+	percent, pausedAt := m.resumeFor(parsed)
+	if percent <= 0 {
+		return play(0)
 	}
-	return m.matcher.MatchParsed(parsed).ProgressPercent
+	m.resumePrompt = &pendingResume{title: title, percent: percent, pausedAt: pausedAt, play: play}
+	m.activeModal = ModalResume
+	return nil
 }
 
-func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, parsed matcher.ParsedMedia) tea.Cmd {
+func (m AppModel) resumeFor(parsed matcher.ParsedMedia) (float64, time.Time) {
+	if m.matcher == nil {
+		return 0, time.Time{}
+	}
+	res := m.matcher.MatchParsed(parsed)
+	return res.ProgressPercent, res.PausedAt
+}
+
+func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, parsed matcher.ParsedMedia, resumePercent float64) tea.Cmd {
 	return func() tea.Msg {
 		if m.torboxClient == nil {
 			return StatusMsg{Text: "TorBox API key not configured", IsErr: true}
@@ -968,7 +1011,7 @@ func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, p
 			URL:             link,
 			Title:           title,
 			Parsed:          parsed,
-			ResumeAtPercent: m.resumePercentFor(parsed),
+			ResumeAtPercent: resumePercent,
 		}
 	}
 }

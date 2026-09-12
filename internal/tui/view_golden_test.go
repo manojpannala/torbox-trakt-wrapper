@@ -148,6 +148,15 @@ func TestAppModel_ViewGolden(t *testing.T) {
 			},
 		},
 		{
+			name: "modal_resume",
+			build: func(t *testing.T) tui.AppModel {
+				m := step(t, goldenModel(t), tui.TorrentsLoadedMsg{Torrents: goldenTorrents()})
+				m = step(t, m, goldenCatalog())
+				m = typeRunes(t, m, "j") // Test Feature Beta is the in-progress one
+				return step(t, m, keyPress(tea.KeyEnter))
+			},
+		},
+		{
 			name: "status_error",
 			build: func(t *testing.T) tui.AppModel {
 				m := step(t, goldenModel(t), tui.TorrentsLoadedMsg{Torrents: goldenTorrents()})

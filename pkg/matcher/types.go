@@ -2,6 +2,7 @@ package matcher
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
@@ -69,6 +70,7 @@ type MatchResult struct {
 	MatchedShow     *trakt.WatchedShow    `json:"matched_show,omitempty"`
 	MatchedEpisode  *trakt.WatchedEpisode `json:"matched_episode,omitempty"`
 	PlaybackID      int64                 `json:"playback_id,omitempty"`
+	PausedAt        time.Time             `json:"paused_at,omitempty"`
 }
 
 type FolderStatus struct {

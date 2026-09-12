@@ -186,6 +186,7 @@ func (m *Matcher) matchMovie(result *MatchResult, normTitle string, parsed Parse
 		result.Badge = "◐"
 		result.ProgressPercent = pb.Progress
 		result.PlaybackID = pb.ID
+		result.PausedAt = pb.PausedAt
 		if result.TraktID == 0 && pb.Movie != nil {
 			result.TraktID = pb.Movie.IDs.Trakt
 			result.TraktTitle = pb.Movie.Title
@@ -237,6 +238,7 @@ func (m *Matcher) matchEpisode(result *MatchResult, normTitle string, parsed Par
 		result.Badge = "◐"
 		result.ProgressPercent = pb.Progress
 		result.PlaybackID = pb.ID
+		result.PausedAt = pb.PausedAt
 	}
 }
 
