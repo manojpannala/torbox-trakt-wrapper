@@ -785,7 +785,7 @@ func (m AppModel) renderLibraryList() string {
 		if statusStr == "downloading" {
 			statusStr = fmt.Sprintf("%.0f%%", item.Progress)
 		}
-		renderedStatus := m.theme.ItemStatusOk.Render(fmt.Sprintf("%-10s", statusStr))
+		renderedStatus := statusStyle(m.theme, item.DownloadState).Render(fmt.Sprintf("%-10s", statusStr))
 
 		line := fmt.Sprintf("%s%s %s  %s  %s", cursorStr, badgeStr, renderedTitle, renderedSize, renderedStatus)
 		sb.WriteString(line)
@@ -978,6 +978,18 @@ func (w *outputTail) errorLine() string {
 		fallback = line
 	}
 	return truncateRunes(fallback, 100)
+}
+
+func statusStyle(theme Theme, downloadState string) lipgloss.Style {
+	state := strings.ToLower(downloadState)
+	switch {
+	case strings.Contains(state, "fail"), strings.Contains(state, "error"):
+		return theme.ItemStatusError
+	case state == "completed", state == "cached", state == "uploading", state == "seeding":
+		return theme.ItemStatusOk
+	default:
+		return theme.ItemStatusWarn
+	}
 }
 
 func truncateToWidth(s string, width int) string {
