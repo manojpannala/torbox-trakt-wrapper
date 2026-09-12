@@ -335,7 +335,11 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			default:
 				var cmd tea.Cmd
+				before := m.addModal.Input.Value()
 				m.addModal.Input, cmd = m.addModal.Input.Update(msg)
+				if m.addModal.Input.Value() != before {
+					m.addModal.FromClipboard = false
+				}
 				return m, cmd
 			}
 
@@ -459,8 +463,8 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "a":
 		m.addModal = NewAddModal()
 		clipText, _ := clipboard.ReadAll()
-		if strings.HasPrefix(clipText, "magnet:?") || strings.HasPrefix(clipText, "http://") || strings.HasPrefix(clipText, "https://") {
-			m.addModal.Input.SetValue(clipText)
+		if val, ok := clipboardPrefill(clipText); ok {
+			m.addModal = prefilledAddModal(val)
 		}
 		m.activeModal = ModalAdd
 		return m, textinput.Blink
