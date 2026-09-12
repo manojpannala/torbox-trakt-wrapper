@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -150,7 +151,7 @@ func NewClient(clientID, clientSecret string, opts ...Option) *Client {
 	c := &Client{
 		clientID:     clientID,
 		clientSecret: clientSecret,
-		baseURL:      DefaultBaseURL,
+		baseURL:      resolveBaseURL(),
 		apiVersion:   DefaultAPIVersion,
 		userAgent:    DefaultUserAgent,
 		httpClient: &http.Client{
@@ -327,4 +328,11 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	}
 
 	return nil
+}
+
+func resolveBaseURL() string {
+	if envURL := os.Getenv("TRAKT_BASE_URL"); envURL != "" {
+		return strings.TrimRight(envURL, "/")
+	}
+	return DefaultBaseURL
 }

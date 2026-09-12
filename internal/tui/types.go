@@ -98,6 +98,11 @@ type TraktCatalogLoadedMsg struct {
 	Playback []trakt.PlaybackItem
 }
 
+type PlaybackFinishedMsg struct {
+	Text  string
+	IsErr bool
+}
+
 type StreamURLResolvedMsg struct {
 	URL        string
 	Title      string

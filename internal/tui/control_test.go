@@ -117,3 +117,39 @@ func TestAppModel_PResumesAPausedTorrent(t *testing.T) {
 	require.NotEmpty(t, rec.calls, "pressing p on a paused torrent must call the API")
 	assert.Equal(t, "resume", rec.calls[0].Body["operation"])
 }
+
+// traktStub points the Trakt client at a recorder for the duration of a test.
+func traktStub(t *testing.T) *apiRecorder {
+	t.Helper()
+	rec := &apiRecorder{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec.record(r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("TRAKT_BASE_URL", server.URL)
+	return rec
+}
+
+func TestAppModel_FinishingPlaybackRefreshesTheTraktCatalog(t *testing.T) {
+	torbox := torboxStub(t)
+	trakt := traktStub(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cfg := config.DefaultConfig()
+	cfg.TorBox.APIKey = "test-api-key"
+	cfg.Trakt.ClientID = "test-client-id"
+	cfg.Trakt.AccessToken = "test-access-token"
+
+	app := tui.NewAppModel(context.Background(), cfg)
+	m, _ := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	_, cmd := m.(tui.AppModel).Update(tui.PlaybackFinishedMsg{Text: "Playback finished"})
+
+	drain(cmd)
+
+	assert.Contains(t, trakt.pathsHit(), "/sync/playback",
+		"scrobbled progress is stale until the catalog is re-fetched")
+	assert.Empty(t, torbox.pathsHit(),
+		"watching something changes nothing about the TorBox listing")
+}

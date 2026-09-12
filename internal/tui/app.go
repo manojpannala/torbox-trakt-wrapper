@@ -169,6 +169,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		return m, nil
 
+	case PlaybackFinishedMsg:
+		m.statusText = msg.Text
+		m.isStatusErr = msg.IsErr
+		m.loading = false
+		return m, m.fetchTraktCatalogCmd()
+
 	case TorrentsLoadedMsg:
 		m.loading = false
 		m.torrents = m.convertTorrents(msg.Torrents)
@@ -1038,11 +1044,11 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 	return tea.Exec(e, func(err error) tea.Msg {
 		if err != nil {
 			if detail := tail.errorLine(); detail != "" {
-				return StatusMsg{Text: fmt.Sprintf("%s failed: %s", exe, detail), IsErr: true}
+				return PlaybackFinishedMsg{Text: fmt.Sprintf("%s failed: %s", exe, detail), IsErr: true}
 			}
-			return StatusMsg{Text: fmt.Sprintf("%s playback ended with error: %v", exe, err), IsErr: true}
+			return PlaybackFinishedMsg{Text: fmt.Sprintf("%s playback ended with error: %v", exe, err), IsErr: true}
 		}
-		return StatusMsg{Text: "Playback finished", IsErr: false}
+		return PlaybackFinishedMsg{Text: "Playback finished", IsErr: false}
 	})
 }
 
