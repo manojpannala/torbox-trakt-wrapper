@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
@@ -200,6 +201,9 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 
 type TraktScrobbler struct {
 	client *trakt.Client
+
+	mu  sync.Mutex
+	ids map[string]trakt.IDs
 }
 
 func NewTraktScrobbler(client *trakt.Client) *TraktScrobbler {
@@ -207,26 +211,31 @@ func NewTraktScrobbler(client *trakt.Client) *TraktScrobbler {
 }
 
 func (s *TraktScrobbler) Start(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
-	req := s.buildScrobbleRequest(media, progress)
+
+	req := s.buildScrobbleRequest(ctx, media, progress)
 	_, err := s.client.StartScrobble(ctx, req)
 	return err
 }
 
 func (s *TraktScrobbler) Pause(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
-	req := s.buildScrobbleRequest(media, progress)
+
+	req := s.buildScrobbleRequest(ctx, media, progress)
 	_, err := s.client.PauseScrobble(ctx, req)
 	return err
 }
 
 func (s *TraktScrobbler) Stop(ctx context.Context, media matcher.ParsedMedia, progress float64) (*trakt.ScrobbleResponse, error) {
-	req := s.buildScrobbleRequest(media, progress)
+
+	req := s.buildScrobbleRequest(ctx, media, progress)
 	return s.client.StopScrobble(ctx, req)
 }
 
-func (s *TraktScrobbler) buildScrobbleRequest(media matcher.ParsedMedia, progress float64) trakt.ScrobbleRequest {
+func (s *TraktScrobbler) buildScrobbleRequest(ctx context.Context, media matcher.ParsedMedia, progress float64) trakt.ScrobbleRequest {
 	req := trakt.ScrobbleRequest{
 		Progress: progress,
 	}
+
+	ids := s.resolve(ctx, media)
 
 	if media.Type == matcher.MediaTypeEpisode {
 		season := media.Season
@@ -235,6 +244,7 @@ func (s *TraktScrobbler) buildScrobbleRequest(media matcher.ParsedMedia, progres
 		}
 		req.Show = &trakt.Show{
 			Title: media.CleanTitle,
+			IDs:   ids,
 		}
 		req.Episode = &trakt.Episode{
 			Season: season,
@@ -244,10 +254,56 @@ func (s *TraktScrobbler) buildScrobbleRequest(media matcher.ParsedMedia, progres
 		req.Movie = &trakt.Movie{
 			Title: media.CleanTitle,
 			Year:  media.Year,
+			IDs:   ids,
 		}
 	}
 
 	return req
+}
+
+// resolve finds media's Trakt id. A release is usually named differently from
+// Trakt's canonical title, and scrobbling by title alone 404s for those. The
+// answer is memoised per title, including a miss, so one playback costs one
+// search. A result whose title does not normalise to the same thing is
+// discarded: scrobbling the wrong item is worse than not scrobbling.
+func (s *TraktScrobbler) resolve(ctx context.Context, media matcher.ParsedMedia) trakt.IDs {
+	if s.client == nil {
+		return trakt.IDs{}
+	}
+
+	key := fmt.Sprintf("%s|%s|%d", media.Type, matcher.NormalizeTitle(media.CleanTitle), media.Year)
+
+	s.mu.Lock()
+	cached, ok := s.ids[key]
+	s.mu.Unlock()
+	if ok {
+		return cached
+	}
+
+	var ids trakt.IDs
+	want := matcher.NormalizeTitle(media.CleanTitle)
+	if media.Type == matcher.MediaTypeEpisode {
+		if show, err := s.client.SearchShow(ctx, media.CleanTitle, media.Year); err == nil && show != nil {
+			if matcher.NormalizeTitle(show.Title) == want {
+				ids = show.IDs
+			}
+		}
+	} else {
+		if movie, err := s.client.SearchMovie(ctx, media.CleanTitle, media.Year); err == nil && movie != nil {
+			if matcher.NormalizeTitle(movie.Title) == want {
+				ids = movie.IDs
+			}
+		}
+	}
+
+	s.mu.Lock()
+	if s.ids == nil {
+		s.ids = make(map[string]trakt.IDs)
+	}
+	s.ids[key] = ids
+	s.mu.Unlock()
+
+	return ids
 }
 
 func streamHost(raw string) string {
