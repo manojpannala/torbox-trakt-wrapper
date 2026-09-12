@@ -416,6 +416,9 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "p":
+		return m, m.controlCurrentItemCmd()
+
 	case "f", "o":
 		item := m.selectedCurrentItem()
 		if item != nil {
@@ -1059,6 +1062,38 @@ func (m AppModel) deleteCurrentItemCmd() tea.Cmd {
 			return StatusMsg{Text: fmt.Sprintf("Failed to delete item: %v", err), IsErr: true}
 		}
 		return StatusMsg{Text: "Item deleted successfully", IsErr: false}
+	}
+}
+
+func (m AppModel) controlCurrentItemCmd() tea.Cmd {
+	item := m.selectedCurrentItem()
+	if item == nil || m.torboxClient == nil {
+		return nil
+	}
+
+	operation, verb := "pause", "Paused"
+	if item.DownloadState == "paused" {
+		operation, verb = "resume", "Resumed"
+	}
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
+		defer cancel()
+
+		var err error
+		switch item.Category {
+		case TabTorrents:
+			err = m.torboxClient.ControlTorrent(ctx, torbox.ControlTorrentRequest{TorrentID: item.ID, Operation: operation})
+		case TabUsenet:
+			err = m.torboxClient.ControlUsenet(ctx, torbox.ControlUsenetRequest{UsenetID: item.ID, Operation: operation})
+		case TabWebDL:
+			err = m.torboxClient.ControlWebDL(ctx, torbox.ControlWebDLRequest{WebDLID: item.ID, Operation: operation})
+		}
+
+		if err != nil {
+			return StatusMsg{Text: fmt.Sprintf("Failed to %s item: %v", operation, err), IsErr: true}
+		}
+		return StatusMsg{Text: fmt.Sprintf("%s %s", verb, item.CleanTitle), IsErr: false}
 	}
 }
 
