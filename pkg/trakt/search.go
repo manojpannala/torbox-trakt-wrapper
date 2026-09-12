@@ -11,25 +11,34 @@ type searchResult struct {
 	Show  *Show  `json:"show,omitempty"`
 }
 
-// SearchMovie resolves a title to a Trakt movie. A release is often named
-// differently from Trakt's canonical title ("Vishwanath and Sons" against
-// "Vishwanath & Sons"), and scrobbling by title alone fails for those.
-// A miss returns (nil, nil) so the caller can fall back.
-func (c *Client) SearchMovie(ctx context.Context, title string, year int) (*Movie, error) {
+// SearchMovies resolves a title to Trakt movies, best match first.
+func (c *Client) SearchMovies(ctx context.Context, title string, year int) ([]Movie, error) {
 	results, err := c.search(ctx, "movie", title, year)
-	if err != nil || len(results) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	return results[0].Movie, nil
+	movies := make([]Movie, 0, len(results))
+	for _, r := range results {
+		if r.Movie != nil {
+			movies = append(movies, *r.Movie)
+		}
+	}
+	return movies, nil
 }
 
-// SearchShow resolves a title to a Trakt show, on the same terms as SearchMovie.
-func (c *Client) SearchShow(ctx context.Context, title string, year int) (*Show, error) {
+// SearchShows resolves a title to Trakt shows, best match first.
+func (c *Client) SearchShows(ctx context.Context, title string, year int) ([]Show, error) {
 	results, err := c.search(ctx, "show", title, year)
-	if err != nil || len(results) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	return results[0].Show, nil
+	shows := make([]Show, 0, len(results))
+	for _, r := range results {
+		if r.Show != nil {
+			shows = append(shows, *r.Show)
+		}
+	}
+	return shows, nil
 }
 
 func (c *Client) search(ctx context.Context, kind, title string, year int) ([]searchResult, error) {

@@ -29,52 +29,54 @@ func searchServer(t *testing.T, body string) (*httptest.Server, *string) {
 	return server, &gotPath
 }
 
-func TestSearchMovie_ResolvesATitleTraktSpellsDifferently(t *testing.T) {
+func TestSearchMovies_ResolvesATitleTraktSpellsDifferently(t *testing.T) {
 	// The release is named "Vishwanath and Sons"; Trakt calls it
 	// "Vishwanath & Sons". Scrobbling by title alone 404s.
 	server, gotPath := searchServer(t, vishwanathResult)
 	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
 
-	movie, err := client.SearchMovie(context.Background(), "Vishwanath and Sons", 2026)
+	movies, err := client.SearchMovies(context.Background(), "Vishwanath and Sons", 2026)
 
 	require.NoError(t, err)
-	require.NotNil(t, movie)
+	require.Len(t, movies, 1)
+	movie := movies[0]
 	assert.Equal(t, 1152187, movie.IDs.Trakt)
 	assert.Equal(t, "Vishwanath & Sons", movie.Title)
 	assert.Contains(t, *gotPath, "/search/movie")
 	assert.Contains(t, *gotPath, "years=2026")
 }
 
-func TestSearchMovie_ReturnsNilWhenNothingMatches(t *testing.T) {
+func TestSearchMovies_ReturnsNilWhenNothingMatches(t *testing.T) {
 	server, _ := searchServer(t, `[]`)
 	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
 
-	movie, err := client.SearchMovie(context.Background(), "No Such Film", 1999)
+	movies, err := client.SearchMovies(context.Background(), "No Such Film", 1999)
 
 	require.NoError(t, err)
-	assert.Nil(t, movie, "an empty result is not an error; the caller falls back")
+	assert.Empty(t, movies, "an empty result is not an error; the caller falls back")
 }
 
-func TestSearchMovie_OmitsTheYearWhenUnknown(t *testing.T) {
+func TestSearchMovies_OmitsTheYearWhenUnknown(t *testing.T) {
 	server, gotPath := searchServer(t, vishwanathResult)
 	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
 
-	_, err := client.SearchMovie(context.Background(), "Vishwanath and Sons", 0)
+	_, err := client.SearchMovies(context.Background(), "Vishwanath and Sons", 0)
 
 	require.NoError(t, err)
 	assert.NotContains(t, *gotPath, "years=")
 }
 
-func TestSearchShow_ResolvesAShow(t *testing.T) {
+func TestSearchShows_ResolvesAShow(t *testing.T) {
 	body := `[{"type":"show","score":900,"show":{"title":"Test Crime Series","year":2021,
 	  "ids":{"trakt":1388,"slug":"test-crime-series"}}}]`
 	server, gotPath := searchServer(t, body)
 	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
 
-	show, err := client.SearchShow(context.Background(), "Test Crime Series", 0)
+	shows, err := client.SearchShows(context.Background(), "Test Crime Series", 0)
 
 	require.NoError(t, err)
-	require.NotNil(t, show)
+	require.Len(t, shows, 1)
+	show := shows[0]
 	assert.Equal(t, 1388, show.IDs.Trakt)
 	assert.Contains(t, *gotPath, "/search/show")
 }

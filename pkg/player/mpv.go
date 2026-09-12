@@ -201,85 +201,53 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 
 type TraktScrobbler struct {
 	client *trakt.Client
+	logger *slog.Logger
 
 	mu  sync.Mutex
 	ids map[string]trakt.IDs
 }
 
-func NewTraktScrobbler(client *trakt.Client) *TraktScrobbler {
-	return &TraktScrobbler{client: client}
+type ScrobblerOption func(*TraktScrobbler)
+
+// WithScrobblerLogger records failed title lookups, which are otherwise silent.
+func WithScrobblerLogger(logger *slog.Logger) ScrobblerOption {
+	return func(s *TraktScrobbler) {
+		if logger != nil {
+			s.logger = logger
+		}
+	}
 }
 
-func (s *TraktScrobbler) Start(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
-	if s.client == nil {
-		return nil
+func NewTraktScrobbler(client *trakt.Client, opts ...ScrobblerOption) *TraktScrobbler {
+	s := &TraktScrobbler{client: client, logger: slog.New(slog.DiscardHandler)}
+	for _, opt := range opts {
+		opt(s)
 	}
-
-	req := s.buildScrobbleRequest(ctx, media, progress)
-	_, err := s.client.StartScrobble(ctx, req)
-	return err
+	return s
 }
 
-func (s *TraktScrobbler) Pause(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
-	if s.client == nil {
-		return nil
-	}
-
-	req := s.buildScrobbleRequest(ctx, media, progress)
-	_, err := s.client.PauseScrobble(ctx, req)
-	return err
-}
-
-func (s *TraktScrobbler) Stop(ctx context.Context, media matcher.ParsedMedia, progress float64) (*trakt.ScrobbleResponse, error) {
-	if s.client == nil {
-		return nil, nil
-	}
-
-	req := s.buildScrobbleRequest(ctx, media, progress)
-	return s.client.StopScrobble(ctx, req)
-}
-
-func (s *TraktScrobbler) buildScrobbleRequest(ctx context.Context, media matcher.ParsedMedia, progress float64) trakt.ScrobbleRequest {
-	req := trakt.ScrobbleRequest{
-		Progress: progress,
-	}
-
-	ids := s.resolve(ctx, media)
+func buildScrobbleRequest(media matcher.ParsedMedia, progress float64, ids trakt.IDs) trakt.ScrobbleRequest {
+	req := trakt.ScrobbleRequest{Progress: progress}
 
 	if media.Type == matcher.MediaTypeEpisode {
 		season := media.Season
 		if season == 0 {
 			season = 1
 		}
-		req.Show = &trakt.Show{
-			Title: media.CleanTitle,
-			IDs:   ids,
-		}
-		req.Episode = &trakt.Episode{
-			Season: season,
-			Number: media.Episode,
-		}
+		req.Show = &trakt.Show{Title: media.CleanTitle, IDs: ids}
+		req.Episode = &trakt.Episode{Season: season, Number: media.Episode}
 	} else {
-		req.Movie = &trakt.Movie{
-			Title: media.CleanTitle,
-			Year:  media.Year,
-			IDs:   ids,
-		}
+		req.Movie = &trakt.Movie{Title: media.CleanTitle, Year: media.Year, IDs: ids}
 	}
 
 	return req
 }
 
-// resolve finds media's Trakt id. A release is usually named differently from
-// Trakt's canonical title, and scrobbling by title alone 404s for those. The
-// answer is memoised per title, including a miss, so one playback costs one
-// search. A result whose title does not normalise to the same thing is
-// discarded: scrobbling the wrong item is worse than not scrobbling.
+// resolve finds media's Trakt id, because a release is usually named
+// differently from Trakt's canonical title and scrobbling by title alone 404s.
+// A hit or a genuine miss is memoised; a failed lookup is not, so a blip does
+// not poison the title for the life of the process.
 func (s *TraktScrobbler) resolve(ctx context.Context, media matcher.ParsedMedia) trakt.IDs {
-	if s.client == nil {
-		return trakt.IDs{}
-	}
-
 	key := fmt.Sprintf("%s|%s|%d", media.Type, matcher.NormalizeTitle(media.CleanTitle), media.Year)
 
 	s.mu.Lock()
@@ -289,20 +257,10 @@ func (s *TraktScrobbler) resolve(ctx context.Context, media matcher.ParsedMedia)
 		return cached
 	}
 
-	var ids trakt.IDs
-	want := matcher.NormalizeTitle(media.CleanTitle)
-	if media.Type == matcher.MediaTypeEpisode {
-		if show, err := s.client.SearchShow(ctx, media.CleanTitle, media.Year); err == nil && show != nil {
-			if matcher.NormalizeTitle(show.Title) == want {
-				ids = show.IDs
-			}
-		}
-	} else {
-		if movie, err := s.client.SearchMovie(ctx, media.CleanTitle, media.Year); err == nil && movie != nil {
-			if matcher.NormalizeTitle(movie.Title) == want {
-				ids = movie.IDs
-			}
-		}
+	ids, err := s.searchIDs(ctx, media)
+	if err != nil {
+		s.logger.Debug("trakt title lookup failed", "title", media.CleanTitle, "err", err)
+		return trakt.IDs{}
 	}
 
 	s.mu.Lock()
@@ -313,6 +271,67 @@ func (s *TraktScrobbler) resolve(ctx context.Context, media matcher.ParsedMedia)
 	s.mu.Unlock()
 
 	return ids
+}
+
+func (s *TraktScrobbler) searchIDs(ctx context.Context, media matcher.ParsedMedia) (trakt.IDs, error) {
+	if media.Type == matcher.MediaTypeEpisode {
+		shows, err := s.client.SearchShows(ctx, media.CleanTitle, media.Year)
+		if err != nil {
+			return trakt.IDs{}, err
+		}
+		for _, show := range shows {
+			if sameItem(media, show.Title, show.Year) {
+				return show.IDs, nil
+			}
+		}
+		return trakt.IDs{}, nil
+	}
+
+	movies, err := s.client.SearchMovies(ctx, media.CleanTitle, media.Year)
+	if err != nil {
+		return trakt.IDs{}, err
+	}
+	for _, movie := range movies {
+		if sameItem(media, movie.Title, movie.Year) {
+			return movie.IDs, nil
+		}
+	}
+	return trakt.IDs{}, nil
+}
+
+// sameItem keeps a search hit only when it is unambiguously the same thing;
+// scrobbling the wrong item is worse than not scrobbling.
+func sameItem(media matcher.ParsedMedia, title string, year int) bool {
+	if matcher.NormalizeTitle(title) != matcher.NormalizeTitle(media.CleanTitle) {
+		return false
+	}
+	return media.Year == 0 || year == 0 || media.Year == year
+}
+
+func (s *TraktScrobbler) Start(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
+	if s.client == nil {
+		return nil
+	}
+	req := buildScrobbleRequest(media, progress, s.resolve(ctx, media))
+	_, err := s.client.StartScrobble(ctx, req)
+	return err
+}
+
+func (s *TraktScrobbler) Pause(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
+	if s.client == nil {
+		return nil
+	}
+	req := buildScrobbleRequest(media, progress, s.resolve(ctx, media))
+	_, err := s.client.PauseScrobble(ctx, req)
+	return err
+}
+
+func (s *TraktScrobbler) Stop(ctx context.Context, media matcher.ParsedMedia, progress float64) (*trakt.ScrobbleResponse, error) {
+	if s.client == nil {
+		return nil, nil
+	}
+	req := buildScrobbleRequest(media, progress, s.resolve(ctx, media))
+	return s.client.StopScrobble(ctx, req)
 }
 
 func streamHost(raw string) string {

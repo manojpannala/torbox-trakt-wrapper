@@ -135,3 +135,79 @@ func TestScrobbler_WithoutATraktClientIsANoOp(t *testing.T) {
 		assert.Nil(t, resp)
 	})
 }
+
+// A transient failure must not poison the title: the Stop scrobble is the one
+// that marks something watched, and it comes minutes after Start.
+func TestScrobbler_DoesNotCacheAFailedLookup(t *testing.T) {
+	var searches int
+	var mu sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/search/movie" {
+			mu.Lock()
+			searches++
+			first := searches == 1
+			mu.Unlock()
+			if first {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(searchHit))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"action":"start","progress":1}`))
+	}))
+	defer server.Close()
+
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL),
+		trakt.WithTokens(trakt.TokenResponse{AccessToken: "tok", ExpiresIn: 99999}))
+	s := player.NewTraktScrobbler(client)
+	ctx := context.Background()
+
+	require.NoError(t, s.Start(ctx, vishwanath(), 1))
+	_, err := s.Stop(ctx, vishwanath(), 90)
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 2, searches, "a failed lookup must be retried, not cached")
+}
+
+func TestScrobbler_SkipsANonMatchingFirstResult(t *testing.T) {
+	body := `[{"type":"movie","movie":{"title":"Totally Different","year":2026,"ids":{"trakt":111}}},
+	          {"type":"movie","movie":{"title":"Vishwanath & Sons","year":2026,"ids":{"trakt":1152187}}}]`
+	stub, client := newTraktStub(t, body)
+
+	require.NoError(t, player.NewTraktScrobbler(client).Start(context.Background(), vishwanath(), 1))
+
+	assert.Equal(t, float64(1152187), stub.movieIDs(t)["trakt"],
+		"a correct match below the top hit must still be found")
+}
+
+func TestScrobbler_RejectsASameTitledDifferentYear(t *testing.T) {
+	body := `[{"type":"movie","movie":{"title":"Vishwanath & Sons","year":1998,"ids":{"trakt":42}}}]`
+	stub, client := newTraktStub(t, body)
+
+	require.NoError(t, player.NewTraktScrobbler(client).Start(context.Background(), vishwanath(), 1))
+
+	assert.Equal(t, float64(0), stub.movieIDs(t)["trakt"], "a remake is not the same film")
+}
+
+func TestScrobbler_ResolvesShowIDsForAnEpisode(t *testing.T) {
+	body := `[{"type":"show","show":{"title":"Test Crime Series","year":2021,"ids":{"trakt":1388}}}]`
+	stub, client := newTraktStub(t, body)
+	episode := matcher.ParsedMedia{
+		CleanTitle: "Test Crime Series", Season: 1, Episode: 4, Type: matcher.MediaTypeEpisode,
+	}
+
+	require.NoError(t, player.NewTraktScrobbler(client).Start(context.Background(), episode, 1))
+
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	show := stub.scrobbleBody["show"].(map[string]any)
+	ids := show["ids"].(map[string]any)
+	assert.Equal(t, float64(1388), ids["trakt"], "trakt wants the show id plus season/number")
+	ep := stub.scrobbleBody["episode"].(map[string]any)
+	assert.Equal(t, float64(4), ep["number"])
+}
