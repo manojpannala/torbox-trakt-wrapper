@@ -2,6 +2,7 @@ package player
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ type Monitor struct {
 	lastTimePos  float64
 	duration     float64
 	onProgress   func(PlaybackProgress)
+	logger       *slog.Logger
 }
 
 func NewMonitor(client *IPCClient, media matcher.ParsedMedia, scrobbler ScrobbleHandler, socketPath string) *Monitor {
@@ -126,8 +128,10 @@ func (m *Monitor) poll(ctx context.Context) {
 	if m.scrobbler != nil {
 		switch action {
 		case scrobbleStart:
+			m.log().Debug("scrobble start", "title", m.media.CleanTitle, "percent", percentPos)
 			_ = m.scrobbler.Start(ctx, m.media, percentPos)
 		case scrobblePause:
+			m.log().Debug("scrobble pause", "title", m.media.CleanTitle, "percent", percentPos)
 			_ = m.scrobbler.Pause(ctx, m.media, percentPos)
 		case scrobbleNone:
 		}
@@ -148,6 +152,8 @@ func (m *Monitor) handleStop(ctx context.Context) {
 	started := m.started
 	finalProg := m.lastProgress
 	m.mu.Unlock()
+
+	m.log().Debug("playback ended", "title", m.media.CleanTitle, "percent", finalProg, "started", started)
 
 	if started && m.scrobbler != nil {
 		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -172,4 +178,11 @@ func (m *Monitor) GetLastProgress() float64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.lastProgress
+}
+
+func (m *Monitor) log() *slog.Logger {
+	if m.logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return m.logger
 }

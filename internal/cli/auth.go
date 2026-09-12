@@ -30,7 +30,7 @@ var authTraktCmd = &cobra.Command{
 			return fmt.Errorf("trakt client_id is not configured in config.toml")
 		}
 
-		client := trakt.NewClient(c.Trakt.ClientID, c.Trakt.ClientSecret)
+		client := trakt.NewClient(c.Trakt.ClientID, c.Trakt.ClientSecret, trakt.WithLogger(logger))
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 

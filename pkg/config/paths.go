@@ -37,6 +37,21 @@ func GetCacheDir() string {
 	return filepath.Join(home, ".cache", AppName)
 }
 
+func GetStateDir() string {
+	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
+		return filepath.Join(xdg, AppName)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", ".local", "state", AppName)
+	}
+	return filepath.Join(home, ".local", "state", AppName)
+}
+
+func GetLogFile() string {
+	return filepath.Join(GetStateDir(), "tt-wrapper.log")
+}
+
 func EnsureSecureDir(dir string) error {
 	return os.MkdirAll(dir, DirPermission)
 }

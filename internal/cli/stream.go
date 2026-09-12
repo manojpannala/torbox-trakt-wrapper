@@ -26,7 +26,7 @@ var streamCmd = &cobra.Command{
 		}
 
 		query := strings.Join(args, " ")
-		tbClient := torbox.NewClient(c.TorBox.APIKey)
+		tbClient := torbox.NewClient(c.TorBox.APIKey, torbox.WithLogger(logger))
 
 		var trClient *trakt.Client
 		if c.Trakt.ClientID != "" {
@@ -39,6 +39,7 @@ var streamCmd = &cobra.Command{
 					CreatedAt:    c.Trakt.TokenCreatedAt,
 					ExpiresIn:    c.Trakt.TokenExpiresIn,
 				}),
+				trakt.WithLogger(logger),
 				trakt.WithOnTokenRefreshed(func(tokens trakt.TokenResponse) {
 					c.Trakt.AccessToken = tokens.AccessToken
 					c.Trakt.RefreshToken = tokens.RefreshToken
@@ -106,6 +107,7 @@ var streamCmd = &cobra.Command{
 			player.WithIPCEnabled(c.Player.EnableIPC),
 			player.WithKeepOpen(c.Player.KeepOpen),
 			player.WithScrobbler(scrobbler),
+			player.WithLogger(logger),
 		)
 
 		fmt.Printf("Launching %s in MPV...\n", parsed.DisplayTitle())

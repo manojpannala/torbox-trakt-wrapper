@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -112,6 +113,14 @@ func WithTimeout(timeout time.Duration) Option {
 }
 
 // WithUserAgent sets a custom User-Agent header.
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) {
+		if logger != nil {
+			c.logger = logger
+		}
+	}
+}
+
 func WithUserAgent(userAgent string) Option {
 	return func(c *Client) {
 		c.userAgent = userAgent
@@ -134,6 +143,7 @@ type Client struct {
 	userAgent  string
 	maxRetries int
 	retryWait  time.Duration
+	logger     *slog.Logger
 }
 
 // NewClient creates a new TorBox API client.
@@ -160,6 +170,7 @@ func NewClient(apiKey string, opts ...Option) *Client {
 		userAgent:  DefaultUserAgent,
 		maxRetries: 2,
 		retryWait:  500 * time.Millisecond,
+		logger:     slog.New(slog.DiscardHandler),
 	}
 
 	for _, opt := range opts {
@@ -247,14 +258,20 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		}
 		req.Header.Set("Accept", "application/json")
 
+		start := time.Now()
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
+			c.logger.Debug("torbox request failed", "method", method, "path", path, "err", err)
 			lastErr = err
 			continue
 		}
 
 		respBody, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		c.logger.Debug("torbox request",
+			"method", method, "path", path,
+			"status", resp.StatusCode,
+			"ms", time.Since(start).Milliseconds())
 		if err != nil {
 			lastErr = fmt.Errorf("reading response body: %w", err)
 			continue

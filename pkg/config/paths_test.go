@@ -22,6 +22,10 @@ func TestPathResolvers(t *testing.T) {
 		assert.True(t, strings.HasSuffix(cfgDir, filepath.Join(".config", AppName)))
 		assert.Equal(t, filepath.Join(cfgDir, "config.toml"), cfgFile)
 		assert.True(t, strings.HasSuffix(cacheDir, filepath.Join(".cache", AppName)))
+
+		stateDir := GetStateDir()
+		assert.True(t, strings.HasSuffix(stateDir, filepath.Join(".local", "state", AppName)))
+		assert.Equal(t, filepath.Join(stateDir, "tt-wrapper.log"), GetLogFile())
 	})
 
 	t.Run("paths with XDG environment variables", func(t *testing.T) {
@@ -35,6 +39,10 @@ func TestPathResolvers(t *testing.T) {
 		assert.Equal(t, filepath.Join(xdgConfig, AppName), GetConfigDir())
 		assert.Equal(t, filepath.Join(xdgConfig, AppName, "config.toml"), GetConfigFile())
 		assert.Equal(t, filepath.Join(xdgCache, AppName), GetCacheDir())
+
+		xdgState := filepath.Join(tmpDir, "custom_state")
+		t.Setenv("XDG_STATE_HOME", xdgState)
+		assert.Equal(t, filepath.Join(xdgState, AppName), GetStateDir())
 	})
 
 	t.Run("EnsureSecureDir sets 0700 permissions", func(t *testing.T) {

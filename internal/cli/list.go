@@ -43,7 +43,7 @@ var listCmd = &cobra.Command{
 			return fmt.Errorf("torbox api_key is not configured")
 		}
 
-		tbClient := torbox.NewClient(c.TorBox.APIKey)
+		tbClient := torbox.NewClient(c.TorBox.APIKey, torbox.WithLogger(logger))
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
@@ -58,6 +58,7 @@ var listCmd = &cobra.Command{
 					CreatedAt:    c.Trakt.TokenCreatedAt,
 					ExpiresIn:    c.Trakt.TokenExpiresIn,
 				}),
+				trakt.WithLogger(logger),
 			)
 			movies, _ := trClient.GetWatchedMovies(ctx)
 			shows, _ := trClient.GetWatchedShows(ctx)

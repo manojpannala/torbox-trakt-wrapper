@@ -31,7 +31,7 @@ var addCmd = &cobra.Command{
 			return fmt.Errorf("download link cannot be empty")
 		}
 
-		client := torbox.NewClient(c.TorBox.APIKey)
+		client := torbox.NewClient(c.TorBox.APIKey, torbox.WithLogger(logger))
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 

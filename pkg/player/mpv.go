@@ -3,6 +3,8 @@ package player
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +54,14 @@ func WithKeepOpen(value string) Option {
 	}
 }
 
+func WithLogger(logger *slog.Logger) Option {
+	return func(p *MPVPlayer) {
+		if logger != nil {
+			p.logger = logger
+		}
+	}
+}
+
 func WithIPCEnabled(enabled bool) Option {
 	return func(p *MPVPlayer) {
 		p.ipcEnabled = enabled
@@ -65,6 +75,7 @@ type MPVPlayer struct {
 	ipcEnabled bool
 	keepOpen   string
 	scrobbler  ScrobbleHandler
+	logger     *slog.Logger
 }
 
 func NewMPVPlayer(opts ...Option) *MPVPlayer {
@@ -77,6 +88,7 @@ func NewMPVPlayer(opts ...Option) *MPVPlayer {
 		executable: "mpv",
 		socketDir:  socketDir,
 		ipcEnabled: true,
+		logger:     slog.New(slog.DiscardHandler),
 	}
 
 	for _, opt := range opts {
@@ -114,9 +126,13 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 
 	args = append(args, p.extraArgs...)
 	args = append(args, media.ExtraArgs...)
-	args = append(args, media.URL)
 
-	cmd := exec.CommandContext(ctx, p.executable, args...)
+	p.logger.Debug("launching player",
+		"executable", p.executable,
+		"args", args,
+		"host", streamHost(media.URL))
+
+	cmd := exec.CommandContext(ctx, p.executable, append(args, media.URL)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -151,6 +167,7 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 			client, err := DialIPC(dialCtx, socketPath, 5*time.Second)
 			if err == nil {
 				monitor := NewMonitor(client, media.Parsed, p.scrobbler, socketPath)
+				monitor.logger = p.logger
 				session.controller.Store(monitor)
 				monitor.Start(ctx)
 			}
@@ -225,4 +242,12 @@ func (s *TraktScrobbler) buildScrobbleRequest(media matcher.ParsedMedia, progres
 	}
 
 	return req
+}
+
+func streamHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }

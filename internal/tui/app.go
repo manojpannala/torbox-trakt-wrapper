@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 )
 
 type AppModel struct {
+	logger       *slog.Logger
 	ctx          context.Context
 	cancel       context.CancelFunc
 	cfg          *config.Config
@@ -59,13 +61,29 @@ type AppModel struct {
 	isStatusErr bool
 }
 
-func NewAppModel(ctx context.Context, cfg *config.Config) AppModel {
+type AppOption func(*AppModel)
+
+func WithLogger(logger *slog.Logger) AppOption {
+	return func(m *AppModel) {
+		if logger != nil {
+			m.logger = logger
+		}
+	}
+}
+
+func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) AppModel {
 	theme := DefaultTheme()
 	ctx, cancel := context.WithCancel(ctx)
 
+	settings := AppModel{logger: slog.New(slog.DiscardHandler)}
+	for _, opt := range opts {
+		opt(&settings)
+	}
+	logger := settings.logger
+
 	var tbClient *torbox.Client
 	if cfg.TorBox.APIKey != "" {
-		tbClient = torbox.NewClient(cfg.TorBox.APIKey)
+		tbClient = torbox.NewClient(cfg.TorBox.APIKey, torbox.WithLogger(logger))
 	}
 
 	var trClient *trakt.Client
@@ -79,6 +97,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config) AppModel {
 				CreatedAt:    cfg.Trakt.TokenCreatedAt,
 				ExpiresIn:    cfg.Trakt.TokenExpiresIn,
 			}),
+			trakt.WithLogger(logger),
 			trakt.WithOnTokenRefreshed(func(tokens trakt.TokenResponse) {
 				cfg.Trakt.AccessToken = tokens.AccessToken
 				cfg.Trakt.RefreshToken = tokens.RefreshToken
@@ -96,6 +115,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config) AppModel {
 		player.WithIPCEnabled(cfg.Player.EnableIPC),
 		player.WithKeepOpen(cfg.Player.KeepOpen),
 		player.WithScrobbler(player.NewTraktScrobbler(trClient)),
+		player.WithLogger(logger),
 	)
 
 	ti := textinput.New()

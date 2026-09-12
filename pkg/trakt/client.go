@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -120,6 +121,14 @@ func WithTokens(tokens TokenResponse) Option {
 }
 
 // WithOnTokenRefreshed registers a callback invoked when tokens are refreshed.
+func WithLogger(logger *slog.Logger) Option {
+	return func(c *Client) {
+		if logger != nil {
+			c.logger = logger
+		}
+	}
+}
+
 func WithOnTokenRefreshed(fn func(tokens TokenResponse)) Option {
 	return func(c *Client) {
 		c.onTokenRefreshed = fn
@@ -137,6 +146,7 @@ type Client struct {
 	mu               sync.RWMutex
 	tokens           TokenResponse
 	onTokenRefreshed func(tokens TokenResponse)
+	logger           *slog.Logger
 }
 
 // NewClient creates a new Trakt.tv API client.
@@ -158,6 +168,7 @@ func NewClient(clientID, clientSecret string, opts ...Option) *Client {
 			Transport: transport,
 			Timeout:   DefaultTimeout,
 		},
+		logger: slog.New(slog.DiscardHandler),
 	}
 
 	for _, opt := range opts {
@@ -257,10 +268,16 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 			}
 		}
 
+		start := time.Now()
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
+			c.logger.Debug("trakt request failed", "method", method, "path", path, "err", err)
 			return 0, nil, err
 		}
+		c.logger.Debug("trakt request",
+			"method", method, "path", path,
+			"status", resp.StatusCode,
+			"ms", time.Since(start).Milliseconds())
 		defer func() {
 			_ = resp.Body.Close()
 		}()
