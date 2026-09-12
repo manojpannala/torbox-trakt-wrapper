@@ -197,9 +197,8 @@ func (ft *FileTreeModel) Render(theme Theme, width, height int) string {
 			title = item.Name
 		}
 
-		availWidth := width - 24
-		if availWidth > 10 && len(title) > availWidth {
-			title = title[:availWidth-3] + "..."
+		if availWidth := width - 24; availWidth > 10 {
+			title = truncateToWidth(title, availWidth)
 		}
 
 		titleStyle := theme.ItemTitle

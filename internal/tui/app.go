@@ -769,9 +769,8 @@ func (m AppModel) renderLibraryList() string {
 			title = item.RawName
 		}
 
-		availWidth := m.width - 36
-		if availWidth > 10 && len(title) > availWidth {
-			title = title[:availWidth-3] + "..."
+		if availWidth := m.width - 36; availWidth > 10 {
+			title = truncateToWidth(title, availWidth)
 		}
 
 		titleStyle := m.theme.ItemTitle
@@ -979,6 +978,28 @@ func (w *outputTail) errorLine() string {
 		fallback = line
 	}
 	return truncateRunes(fallback, 100)
+}
+
+func truncateToWidth(s string, width int) string {
+	if width <= 0 || lipgloss.Width(s) <= width {
+		return s
+	}
+	if width <= 3 {
+		return strings.Repeat(".", width)
+	}
+
+	limit := width - 3
+	var b strings.Builder
+	used := 0
+	for _, r := range s {
+		w := lipgloss.Width(string(r))
+		if used+w > limit {
+			break
+		}
+		b.WriteRune(r)
+		used += w
+	}
+	return b.String() + "..."
 }
 
 func truncateRunes(s string, limit int) string {
