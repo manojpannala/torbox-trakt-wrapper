@@ -536,6 +536,7 @@ func (m *AppModel) convertTorrents(items []torbox.Torrent) []LibraryItem {
 			DownloadState: t.DownloadState,
 			Progress:      t.Progress * 100,
 			Speed:         t.DownloadSpeed,
+			ETA:           t.ETA,
 			Seeds:         t.Seeds,
 			Category:      TabTorrents,
 			TorrentFiles:  t.Files,
@@ -564,6 +565,7 @@ func (m *AppModel) convertUsenet(items []torbox.UsenetItem) []LibraryItem {
 			DownloadState: u.DownloadState,
 			Progress:      u.Progress * 100,
 			Speed:         u.DownloadSpeed,
+			ETA:           u.ETA,
 			Category:      TabUsenet,
 			UsenetFiles:   u.Files,
 			TraktBadge:    matchRes.Badge,
@@ -590,6 +592,7 @@ func (m *AppModel) convertWebDL(items []torbox.WebDLItem) []LibraryItem {
 			DownloadState: w.DownloadState,
 			Progress:      w.Progress * 100,
 			Speed:         w.DownloadSpeed,
+			ETA:           w.ETA,
 			Category:      TabWebDL,
 			WebDLFiles:    w.Files,
 			TraktBadge:    matchRes.Badge,
@@ -788,6 +791,9 @@ func (m AppModel) renderLibraryList() string {
 		renderedStatus := statusStyle(m.theme, item.DownloadState).Render(fmt.Sprintf("%-10s", statusStr))
 
 		line := fmt.Sprintf("%s%s %s  %s  %s", cursorStr, badgeStr, renderedTitle, renderedSize, renderedStatus)
+		if metrics := renderMetrics(item); metrics != "" && m.width >= 100 {
+			line += "  " + m.theme.ItemSize.Render(metrics)
+		}
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
@@ -978,6 +984,31 @@ func (w *outputTail) errorLine() string {
 		fallback = line
 	}
 	return truncateRunes(fallback, 100)
+}
+
+func renderMetrics(item LibraryItem) string {
+	var parts []string
+	if item.Speed > 0 {
+		parts = append(parts, formatBytes(item.Speed)+"/s")
+	}
+	if item.ETA > 0 {
+		parts = append(parts, "ETA "+formatDuration(item.ETA))
+	}
+	if item.Seeds > 0 {
+		parts = append(parts, fmt.Sprintf("S:%d", item.Seeds))
+	}
+	return strings.Join(parts, "  ")
+}
+
+func formatDuration(seconds int64) string {
+	switch {
+	case seconds >= 3600:
+		return fmt.Sprintf("%dh%02dm", seconds/3600, (seconds%3600)/60)
+	case seconds >= 60:
+		return fmt.Sprintf("%dm", seconds/60)
+	default:
+		return fmt.Sprintf("%ds", seconds)
+	}
 }
 
 func statusStyle(theme Theme, downloadState string) lipgloss.Style {

@@ -3,7 +3,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ❯     Test Feature Alpha (2023)                             8.0 GiB  completed                                          
       Test Feature Beta (2022)                             24.0 GiB  completed                                          
-      Test Series Gamma S01                                12.0 GiB  38%                                                
+      Test Series Gamma S01                                12.0 GiB  38%         12.0 MiB/s  ETA 5m  S:42               
                                                                                                                         
  ✖ Failed to resolve stream URL[Tab] Switch  [Enter] Stream  [f] Files  [/] Filter  [a] Add  [d] Delete  [A] Trakt  [?] 
  Help  [q] Quit                                                                                                         

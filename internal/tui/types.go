@@ -55,6 +55,7 @@ type LibraryItem struct {
 	DownloadState string
 	Progress      float64
 	Speed         int64
+	ETA           int64
 	Seeds         int
 	Category      TabType
 	TorrentFiles  []torbox.TorrentFile

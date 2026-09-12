@@ -53,6 +53,9 @@ func goldenTorrents() []torbox.Torrent {
 			Size:          12 * 1024 * 1024 * 1024,
 			DownloadState: "downloading",
 			Progress:      0.375,
+			DownloadSpeed: 12 * 1024 * 1024,
+			ETA:           300,
+			Seeds:         42,
 			Files: []torbox.TorrentFile{
 				{ID: 31, Name: "Test.Series.Gamma.S01E01.1080p.mkv", Size: 3 * 1024 * 1024 * 1024},
 				{ID: 32, Name: "Test.Series.Gamma.S01E02.1080p.mkv", Size: 3 * 1024 * 1024 * 1024},
