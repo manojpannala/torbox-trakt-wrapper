@@ -78,3 +78,13 @@ func TestMPVPlayer_LogsArgvWithoutTheSignedURL(t *testing.T) {
 	assert.NotContains(t, out, "sig-abc123", "a signed stream URL must never reach the log")
 	assert.Contains(t, out, "store.torbox.app", "the host is useful and not sensitive")
 }
+
+func TestMPVPlayer_StreamURLCannotBeParsedAsAnOption(t *testing.T) {
+	// media.URL is a raw string from the TorBox API. Without an option
+	// terminator mpv reads a leading -- as a flag, and --script= runs Lua.
+	args := capturedArgs(t, player.MediaStream{URL: "--script=/tmp/evil.lua"})
+
+	require.GreaterOrEqual(t, len(args), 2)
+	assert.Equal(t, "--", args[len(args)-2], "the option terminator must precede the url")
+	assert.Equal(t, "--script=/tmp/evil.lua", args[len(args)-1])
+}

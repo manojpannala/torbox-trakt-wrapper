@@ -81,7 +81,13 @@ type MPVPlayer struct {
 func NewMPVPlayer(opts ...Option) *MPVPlayer {
 	socketDir := filepath.Join(config.GetConfigDir(), "sockets")
 	if err := config.EnsureSecureDir(socketDir); err != nil {
-		socketDir = os.TempDir()
+		// MkdirTemp is 0700; os.TempDir is world-readable and the ipc
+		// socket accepts arbitrary mpv commands.
+		if tmp, tmpErr := os.MkdirTemp("", "tt-wrapper-sockets-"); tmpErr == nil {
+			socketDir = tmp
+		} else {
+			socketDir = os.TempDir()
+		}
 	}
 
 	p := &MPVPlayer{
@@ -132,7 +138,8 @@ func (p *MPVPlayer) Play(ctx context.Context, media MediaStream) (*Session, erro
 		"args", args,
 		"host", streamHost(media.URL))
 
-	cmd := exec.CommandContext(ctx, p.executable, append(args, media.URL)...)
+	// -- stops mpv parsing an api-supplied url as an option.
+	cmd := exec.CommandContext(ctx, p.executable, append(args, "--", media.URL)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
