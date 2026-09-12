@@ -40,6 +40,10 @@ type ParsedMedia struct {
 }
 
 func (p ParsedMedia) DisplayTitle() string {
+	return SanitizeDisplay(p.displayTitle())
+}
+
+func (p ParsedMedia) displayTitle() string {
 	if p.Type == MediaTypeEpisode {
 		if p.EpisodeEnd > p.Episode {
 			return fmt.Sprintf("%s S%02dE%02d-E%02d", p.CleanTitle, p.Season, p.Episode, p.EpisodeEnd)

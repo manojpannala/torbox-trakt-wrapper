@@ -581,7 +581,7 @@ func (m *AppModel) convertTorrents(items []torbox.Torrent) []LibraryItem {
 
 		res[i] = LibraryItem{
 			ID:            t.ID,
-			RawName:       t.Name,
+			RawName:       matcher.SanitizeDisplay(t.Name),
 			CleanTitle:    parsed.DisplayTitle(),
 			Size:          t.Size,
 			FormattedSize: formatBytes(t.Size),
@@ -610,7 +610,7 @@ func (m *AppModel) convertUsenet(items []torbox.UsenetItem) []LibraryItem {
 
 		res[i] = LibraryItem{
 			ID:            u.ID,
-			RawName:       u.Name,
+			RawName:       matcher.SanitizeDisplay(u.Name),
 			CleanTitle:    parsed.DisplayTitle(),
 			Size:          u.Size,
 			FormattedSize: formatBytes(u.Size),
@@ -637,7 +637,7 @@ func (m *AppModel) convertWebDL(items []torbox.WebDLItem) []LibraryItem {
 
 		res[i] = LibraryItem{
 			ID:            w.ID,
-			RawName:       w.Name,
+			RawName:       matcher.SanitizeDisplay(w.Name),
 			CleanTitle:    parsed.DisplayTitle(),
 			Size:          w.Size,
 			FormattedSize: formatBytes(w.Size),

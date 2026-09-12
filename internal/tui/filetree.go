@@ -57,7 +57,7 @@ func NewFileTreeModel(parent *LibraryItem, matcherEngine *matcher.Matcher) FileT
 
 			ft.Items = append(ft.Items, FileTreeItem{
 				ID:            f.ID,
-				Name:          f.Name,
+				Name:          matcher.SanitizeDisplay(f.Name),
 				CleanTitle:    parsed.DisplayTitle(),
 				Size:          f.Size,
 				FormattedSize: formatBytes(f.Size),
@@ -83,7 +83,7 @@ func NewFileTreeModel(parent *LibraryItem, matcherEngine *matcher.Matcher) FileT
 
 			ft.Items = append(ft.Items, FileTreeItem{
 				ID:            f.ID,
-				Name:          f.Name,
+				Name:          matcher.SanitizeDisplay(f.Name),
 				CleanTitle:    parsed.DisplayTitle(),
 				Size:          f.Size,
 				FormattedSize: formatBytes(f.Size),
@@ -109,7 +109,7 @@ func NewFileTreeModel(parent *LibraryItem, matcherEngine *matcher.Matcher) FileT
 
 			ft.Items = append(ft.Items, FileTreeItem{
 				ID:            f.ID,
-				Name:          f.Name,
+				Name:          matcher.SanitizeDisplay(f.Name),
 				CleanTitle:    parsed.DisplayTitle(),
 				Size:          f.Size,
 				FormattedSize: formatBytes(f.Size),

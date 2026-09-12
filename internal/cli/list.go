@@ -99,7 +99,7 @@ var listCmd = &cobra.Command{
 				items = append(items, ListItemOutput{
 					ID:            t.ID,
 					Category:      "torrents",
-					Name:          t.Name,
+					Name:          matcher.SanitizeDisplay(t.Name),
 					CleanTitle:    parsed.DisplayTitle(),
 					Size:          t.Size,
 					FormattedSize: formatBytes(t.Size),
@@ -121,7 +121,7 @@ var listCmd = &cobra.Command{
 				items = append(items, ListItemOutput{
 					ID:            u.ID,
 					Category:      "usenet",
-					Name:          u.Name,
+					Name:          matcher.SanitizeDisplay(u.Name),
 					CleanTitle:    parsed.DisplayTitle(),
 					Size:          u.Size,
 					FormattedSize: formatBytes(u.Size),
@@ -143,7 +143,7 @@ var listCmd = &cobra.Command{
 				items = append(items, ListItemOutput{
 					ID:            w.ID,
 					Category:      "webdl",
-					Name:          w.Name,
+					Name:          matcher.SanitizeDisplay(w.Name),
 					CleanTitle:    parsed.DisplayTitle(),
 					Size:          w.Size,
 					FormattedSize: formatBytes(w.Size),
