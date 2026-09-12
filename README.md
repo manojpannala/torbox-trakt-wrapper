@@ -19,7 +19,7 @@ A high-performance terminal client and TUI for browsing, streaming, and managing
   - Interactive multi-tab browser (`[1] Torrents`, `[2] Usenet`, `[3] Web-DL`).
   - Multi-file torrent & TV series folder tree explorer.
   - Instant live fuzzy search/filter (`/`).
-  - Modals for magnet adding (with clipboard auto-paste), deletion confirmation, Trakt pairing, and help cheat sheet.
+  - Modals for magnet adding (with clipboard auto-paste), deletion confirmation, resume-or-restart, Trakt pairing, and help cheat sheet.
 - **🧹 Intelligent Media Parser**:
   - Cleans release scene tags (`2160p`, `Remux`, `HEVC`, `DDP5.1`, `TrueHD`, `HDR`, `AV1`).
   - Right-to-left reverse year extraction, so titles that themselves contain or consist of a four-digit number still resolve to the correct release year.
@@ -85,6 +85,10 @@ make build
 | <kbd>A</kbd> | Open Trakt.tv OAuth device code pairing modal |
 | <kbd>?</kbd> | Toggle keyboard shortcuts help overlay |
 | <kbd>q</kbd> / <kbd>Ctrl+C</kbd> | Quit application |
+
+Playing something Trakt has a partial position for opens a resume prompt first:
+<kbd>r</kbd> resumes, <kbd>s</kbd> starts over, <kbd>Esc</kbd> cancels. Inside
+that prompt <kbd>r</kbd> means resume, not refresh.
 
 ---
 

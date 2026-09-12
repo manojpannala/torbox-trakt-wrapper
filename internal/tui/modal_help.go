@@ -11,7 +11,7 @@ func renderHelpModal(theme Theme, width int) string {
 		key  string
 		desc string
 	}{
-		{"Enter / Space", "Stream media with MPV"},
+		{"Enter / Space", "Stream with MPV (offers resume if part-watched)"},
 		{"Tab / 1,2,3", "Switch tabs (Torrents / Usenet / Web-DL)"},
 		{"f / o", "Open file tree / folder browser"},
 		{"/ ", "Search / filter library list"},

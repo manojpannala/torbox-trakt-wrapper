@@ -11,7 +11,8 @@
                                │  Keyboard Shortcuts                                    │                               
                                │                                                        │                               
                                │                                                        │                               
-                               │  Enter / Space   Stream media with MPV                 │                               
+                               │  Enter / Space   Stream with MPV (offers resume if     │                               
+                               │  part-watched)                                         │                               
                                │  Tab / 1,2,3     Switch tabs (Torrents / Usenet /      │                               
                                │  Web-DL)                                               │                               
                                │  f / o           Open file tree / folder browser       │                               
@@ -29,7 +30,6 @@
                                │    Press Esc or ? to Close                             │                               
                                │                                                        │                               
                                ╰────────────────────────────────────────────────────────╯                               
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

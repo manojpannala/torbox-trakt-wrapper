@@ -240,6 +240,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.Trakt.TokenExpiresIn = msg.Token.ExpiresIn
 		_ = m.cfg.Save()
 		m.activeModal = ModalNone
+		m.resumePrompt = nil
 		m.statusText = "Successfully paired with Trakt.tv!"
 		m.isStatusErr = false
 		cmds = append(cmds, m.fetchTraktCatalogCmd())
@@ -293,22 +294,19 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		case ModalResume:
 			p := m.resumePrompt
+			if p == nil {
+				m.activeModal = ModalNone
+				return m, nil
+			}
 			switch msg.String() {
 			case "r", "R", "enter":
 				m.activeModal, m.resumePrompt = ModalNone, nil
-				if p != nil {
-					return m, p.play(p.percent)
-				}
-				return m, nil
+				return m, p.play(p.percent)
 			case "s", "S":
 				m.activeModal, m.resumePrompt = ModalNone, nil
-				if p != nil {
-					return m, p.play(0)
-				}
-				return m, nil
+				return m, p.play(0)
 			case "esc", "q":
 				m.activeModal, m.resumePrompt = ModalNone, nil
-				return m, nil
 			}
 			return m, nil
 
@@ -365,9 +363,10 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if selected != nil && m.fileTree.ParentItem != nil {
 				parent, fileID := m.fileTree.ParentItem, selected.ID
 				title, parsed := selected.CleanTitle, selected.Parsed
-				return m, m.beginStream(title, parsed, func(p float64) tea.Cmd {
+				cmd := m.beginStream(title, parsed, func(p float64) tea.Cmd {
 					return m.streamFileCmd(parent, fileID, title, parsed, p)
 				})
+				return m, cmd
 			}
 			return m, nil
 		}
@@ -500,9 +499,10 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.activeView = ViewFileTree
 				return m, nil
 			}
-			return m, m.beginStream(item.CleanTitle, item.Parsed, func(p float64) tea.Cmd {
+			cmd := m.beginStream(item.CleanTitle, item.Parsed, func(p float64) tea.Cmd {
 				return m.streamItemCmd(item, p)
 			})
+			return m, cmd
 		}
 	}
 
@@ -963,8 +963,6 @@ func (m AppModel) streamItemCmd(item *LibraryItem, resumePercent float64) tea.Cm
 	}
 }
 
-// beginStream prompts when Trakt has a position, and plays straight away when
-// it does not.
 func (m *AppModel) beginStream(title string, parsed matcher.ParsedMedia, play func(float64) tea.Cmd) tea.Cmd {
 	percent, pausedAt := m.resumeFor(parsed)
 	if percent <= 0 {
