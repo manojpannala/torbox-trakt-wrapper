@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/logging"
 )
 
 const (
@@ -120,7 +121,7 @@ func WithTokens(tokens TokenResponse) Option {
 	}
 }
 
-// WithOnTokenRefreshed registers a callback invoked when tokens are refreshed.
+// WithLogger sends request logs to logger.
 func WithLogger(logger *slog.Logger) Option {
 	return func(c *Client) {
 		if logger != nil {
@@ -129,6 +130,7 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithOnTokenRefreshed registers a callback invoked when tokens are refreshed.
 func WithOnTokenRefreshed(fn func(tokens TokenResponse)) Option {
 	return func(c *Client) {
 		c.onTokenRefreshed = fn
@@ -271,11 +273,11 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		start := time.Now()
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			c.logger.Debug("trakt request failed", "method", method, "path", path, "err", err)
+			c.logger.Debug("trakt request failed", "method", method, "path", logging.Redact(path), "err", logging.Redact(err.Error()))
 			return 0, nil, err
 		}
 		c.logger.Debug("trakt request",
-			"method", method, "path", path,
+			"method", method, "path", logging.Redact(path),
 			"status", resp.StatusCode,
 			"ms", time.Since(start).Milliseconds())
 		defer func() {

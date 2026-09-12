@@ -134,8 +134,9 @@ The file is created at `0600` and only when `--verbose` is passed — a normal r
 writes nothing. It records API requests (method, path, status, duration), the
 flags `mpv` was launched with, and scrobble decisions.
 
-API keys and tokens are never written: credentials travel in headers rather than
-URLs, request bodies and headers are never logged, and the signed stream URL is
+API keys and tokens are never written. Request bodies and headers are never
+logged, credential query parameters are blanked to `REDACTED` (TorBox's
+download-link endpoints carry the key as `token=`), and the signed stream URL is
 reduced to its host. Attach it to a bug report as-is.
 
 ---

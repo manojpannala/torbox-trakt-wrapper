@@ -1,6 +1,7 @@
 package player
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"os"
@@ -38,7 +39,7 @@ type Monitor struct {
 	logger       *slog.Logger
 }
 
-func NewMonitor(client *IPCClient, media matcher.ParsedMedia, scrobbler ScrobbleHandler, socketPath string) *Monitor {
+func NewMonitor(client *IPCClient, media matcher.ParsedMedia, scrobbler ScrobbleHandler, socketPath string, logger *slog.Logger) *Monitor {
 	return &Monitor{
 		client:       client,
 		media:        media,
@@ -46,6 +47,7 @@ func NewMonitor(client *IPCClient, media matcher.ParsedMedia, scrobbler Scrobble
 		socketPath:   socketPath,
 		pollInterval: 1 * time.Second,
 		stopCh:       make(chan struct{}),
+		logger:       cmp.Or(logger, slog.New(slog.DiscardHandler)),
 	}
 }
 
@@ -128,11 +130,11 @@ func (m *Monitor) poll(ctx context.Context) {
 	if m.scrobbler != nil {
 		switch action {
 		case scrobbleStart:
-			m.log().Debug("scrobble start", "title", m.media.CleanTitle, "percent", percentPos)
-			_ = m.scrobbler.Start(ctx, m.media, percentPos)
+			err := m.scrobbler.Start(ctx, m.media, percentPos)
+			m.logger.Debug("scrobble start", "title", m.media.CleanTitle, "percent", percentPos, "err", err)
 		case scrobblePause:
-			m.log().Debug("scrobble pause", "title", m.media.CleanTitle, "percent", percentPos)
-			_ = m.scrobbler.Pause(ctx, m.media, percentPos)
+			err := m.scrobbler.Pause(ctx, m.media, percentPos)
+			m.logger.Debug("scrobble pause", "title", m.media.CleanTitle, "percent", percentPos, "err", err)
 		case scrobbleNone:
 		}
 	}
@@ -153,12 +155,13 @@ func (m *Monitor) handleStop(ctx context.Context) {
 	finalProg := m.lastProgress
 	m.mu.Unlock()
 
-	m.log().Debug("playback ended", "title", m.media.CleanTitle, "percent", finalProg, "started", started)
-
 	if started && m.scrobbler != nil {
 		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		_, _ = m.scrobbler.Stop(stopCtx, m.media, finalProg)
+		_, err := m.scrobbler.Stop(stopCtx, m.media, finalProg)
 		cancel()
+		m.logger.Debug("scrobble stop", "title", m.media.CleanTitle, "percent", finalProg, "err", err)
+	} else {
+		m.logger.Debug("playback ended without a scrobble", "title", m.media.CleanTitle, "started", started)
 	}
 
 	_ = m.client.Close()
@@ -178,11 +181,4 @@ func (m *Monitor) GetLastProgress() float64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.lastProgress
-}
-
-func (m *Monitor) log() *slog.Logger {
-	if m.logger == nil {
-		return slog.New(slog.DiscardHandler)
-	}
-	return m.logger
 }

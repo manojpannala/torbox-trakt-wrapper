@@ -68,3 +68,16 @@ func TestNew_SecretsAreRedacted(t *testing.T) {
 	}
 	assert.Contains(t, contents, "/oauth/token", "non-secret context must survive")
 }
+
+func TestRedact_BlanksCredentialQueryParameters(t *testing.T) {
+	assert.Equal(t,
+		"/torrents/requestdl?file_id=2&token=REDACTED&torrent_id=1",
+		logging.Redact("/torrents/requestdl?file_id=2&token=tb-live-secret&torrent_id=1"),
+		"the non-secret parameters are the useful part and must survive")
+
+	assert.NotContains(t,
+		logging.Redact(`Get "https://api.torbox.app/v1/api/torrents/requestdl?token=tb-live-secret": dial tcp: refused`),
+		"tb-live-secret", "a *url.Error embeds the full URL")
+
+	assert.Equal(t, "/torrents/mylist", logging.Redact("/torrents/mylist"))
+}

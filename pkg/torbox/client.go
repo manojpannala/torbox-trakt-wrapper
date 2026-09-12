@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/logging"
 )
 
 const (
@@ -112,7 +113,7 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithUserAgent sets a custom User-Agent header.
+// WithLogger sends request logs to logger.
 func WithLogger(logger *slog.Logger) Option {
 	return func(c *Client) {
 		if logger != nil {
@@ -121,6 +122,7 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithUserAgent sets a custom User-Agent header.
 func WithUserAgent(userAgent string) Option {
 	return func(c *Client) {
 		c.userAgent = userAgent
@@ -261,7 +263,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		start := time.Now()
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			c.logger.Debug("torbox request failed", "method", method, "path", path, "err", err)
+			c.logger.Debug("torbox request failed", "method", method, "path", logging.Redact(path), "err", logging.Redact(err.Error()))
 			lastErr = err
 			continue
 		}
@@ -269,7 +271,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		respBody, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		c.logger.Debug("torbox request",
-			"method", method, "path", path,
+			"method", method, "path", logging.Redact(path),
 			"status", resp.StatusCode,
 			"ms", time.Since(start).Milliseconds())
 		if err != nil {

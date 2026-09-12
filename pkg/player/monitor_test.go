@@ -87,7 +87,7 @@ func TestMonitor_ScrobbleLifecycle(t *testing.T) {
 		Type:       matcher.MediaTypeMovie,
 	}
 
-	monitor := player.NewMonitor(client, media, scrobbler, sockPath)
+	monitor := player.NewMonitor(client, media, scrobbler, sockPath, nil)
 
 	var progressEvents []player.PlaybackProgress
 	var mu sync.Mutex

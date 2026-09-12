@@ -39,9 +39,6 @@ var rootCmd = &cobra.Command{
 		logger.Debug("starting", "version", config.Version, "command", cmd.Name())
 		return nil
 	},
-	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-		return closeLog()
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -54,6 +51,8 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
+	defer func() { _ = closeLog() }()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -89,8 +88,4 @@ func GetConfig() *config.Config {
 
 func GetRootCommand() *cobra.Command {
 	return rootCmd
-}
-
-func GetLogger() *slog.Logger {
-	return logger
 }

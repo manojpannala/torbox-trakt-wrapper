@@ -59,6 +59,7 @@ func (c *Client) ExchangeDeviceCode(ctx context.Context, deviceCode string) (*To
 	req.Header.Set("User-Agent", c.userAgent)
 
 	resp, err := c.httpClient.Do(req)
+	c.logger.Debug("trakt oauth request", "path", "/oauth/device/token", "err", err)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +197,7 @@ func (c *Client) refreshTokenInternal(ctx context.Context) error {
 	req.Header.Set("User-Agent", c.userAgent)
 
 	resp, err := c.httpClient.Do(req)
+	c.logger.Debug("trakt oauth request", "path", "/oauth/token", "err", err)
 	if err != nil {
 		return err
 	}

@@ -23,7 +23,6 @@ import (
 )
 
 type AppModel struct {
-	logger       *slog.Logger
 	ctx          context.Context
 	cancel       context.CancelFunc
 	cfg          *config.Config
@@ -61,12 +60,17 @@ type AppModel struct {
 	isStatusErr bool
 }
 
-type AppOption func(*AppModel)
+type appOptions struct {
+	logger *slog.Logger
+}
 
+type AppOption func(*appOptions)
+
+// WithLogger routes the model's API clients and player through logger.
 func WithLogger(logger *slog.Logger) AppOption {
-	return func(m *AppModel) {
+	return func(o *appOptions) {
 		if logger != nil {
-			m.logger = logger
+			o.logger = logger
 		}
 	}
 }
@@ -75,7 +79,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 	theme := DefaultTheme()
 	ctx, cancel := context.WithCancel(ctx)
 
-	settings := AppModel{logger: slog.New(slog.DiscardHandler)}
+	settings := appOptions{logger: slog.New(slog.DiscardHandler)}
 	for _, opt := range opts {
 		opt(&settings)
 	}

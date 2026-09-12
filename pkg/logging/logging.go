@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
@@ -47,6 +48,17 @@ func New(verbose bool, path string) (*slog.Logger, func() error, error) {
 		ReplaceAttr: redactSecrets,
 	})
 	return slog.New(handler), file.Close, nil
+}
+
+// credentialParam matches a credential carried in a query string. TorBox's
+// download-link endpoints put the api key in `token=`, so a logged path or a
+// *url.Error carries it.
+var credentialParam = regexp.MustCompile(`(?i)([?&](?:token|api_key|apikey|key|secret|auth|access_token|refresh_token|client_secret)=)[^&\s"]*`)
+
+// Redact blanks credential query parameters in s, which may be a URL, a path,
+// or an error message that embeds one.
+func Redact(s string) string {
+	return credentialParam.ReplaceAllString(s, "${1}"+redacted)
 }
 
 func redactSecrets(_ []string, a slog.Attr) slog.Attr {
