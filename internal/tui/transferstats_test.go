@@ -7,7 +7,7 @@ import (
 )
 
 func TestRenderMetrics_ShowsSpeedEtaAndSeedsWhileDownloading(t *testing.T) {
-	got := renderMetrics(LibraryItem{
+	got := renderTransferStats(LibraryItem{
 		Speed: 12 * 1024 * 1024,
 		ETA:   300,
 		Seeds: 42,
@@ -17,12 +17,12 @@ func TestRenderMetrics_ShowsSpeedEtaAndSeedsWhileDownloading(t *testing.T) {
 }
 
 func TestRenderMetrics_IsEmptyForAFinishedItem(t *testing.T) {
-	assert.Empty(t, renderMetrics(LibraryItem{DownloadState: "completed"}))
+	assert.Empty(t, renderTransferStats(LibraryItem{DownloadState: "completed"}))
 }
 
 func TestRenderMetrics_OmitsWhateverIsUnknown(t *testing.T) {
-	assert.Equal(t, "S:7", renderMetrics(LibraryItem{Seeds: 7}))
-	assert.Equal(t, "1.0 MiB/s", renderMetrics(LibraryItem{Speed: 1024 * 1024}))
+	assert.Equal(t, "S:7", renderTransferStats(LibraryItem{Seeds: 7}))
+	assert.Equal(t, "1.0 MiB/s", renderTransferStats(LibraryItem{Speed: 1024 * 1024}))
 }
 
 func TestFormatDuration_ScalesToTheMagnitude(t *testing.T) {

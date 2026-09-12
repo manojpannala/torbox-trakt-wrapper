@@ -78,8 +78,7 @@ func appWithTorrent(t *testing.T, state string) tui.AppModel {
 
 func press(t *testing.T, m tui.AppModel, key rune) tea.Cmd {
 	t.Helper()
-	next, cmd := m.Update(tea.KeyPressMsg{Code: key, Text: string(key)})
-	_ = next
+	_, cmd := m.Update(tea.KeyPressMsg{Code: key, Text: string(key)})
 	return cmd
 }
 
@@ -133,8 +132,8 @@ func traktStub(t *testing.T) *apiRecorder {
 }
 
 func TestAppModel_FinishingPlaybackRefreshesTheTraktCatalog(t *testing.T) {
-	torbox := torboxStub(t)
-	trakt := traktStub(t)
+	torboxCalls := torboxStub(t)
+	traktCalls := traktStub(t)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	cfg := config.DefaultConfig()
@@ -148,8 +147,28 @@ func TestAppModel_FinishingPlaybackRefreshesTheTraktCatalog(t *testing.T) {
 
 	drain(cmd)
 
-	assert.Contains(t, trakt.pathsHit(), "/sync/playback",
+	assert.Contains(t, traktCalls.pathsHit(), "/sync/playback",
 		"scrobbled progress is stale until the catalog is re-fetched")
-	assert.Empty(t, torbox.pathsHit(),
+	assert.Empty(t, torboxCalls.pathsHit(),
 		"watching something changes nothing about the TorBox listing")
+}
+
+func TestAppModel_PSaysSoWhenTorBoxIsNotConfigured(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cfg := config.DefaultConfig()
+	cfg.TorBox.APIKey = ""
+
+	app := tui.NewAppModel(context.Background(), cfg)
+	m, _ := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m, _ = m.(tui.AppModel).Update(tui.TorrentsLoadedMsg{Torrents: []torbox.Torrent{
+		{ID: 77, Name: "Test.Feature.Alpha.2023.1080p.mkv", DownloadState: "downloading"},
+	}})
+
+	cmd := press(t, m.(tui.AppModel), 'p')
+
+	require.NotNil(t, cmd, "a documented key must never silently no-op")
+	status, ok := cmd().(tui.StatusMsg)
+	require.True(t, ok)
+	assert.True(t, status.IsErr)
 }

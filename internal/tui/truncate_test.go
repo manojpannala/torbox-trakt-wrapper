@@ -34,3 +34,10 @@ func TestTruncateToWidth_NeverSplitsARune(t *testing.T) {
 	assert.True(t, utf8.ValidString(got), "byte slicing emitted invalid UTF-8: %q", got)
 	assert.LessOrEqual(t, lipgloss.Width(got), 11)
 }
+
+func TestPadToWidth_PadsByDisplayCellsNotRunes(t *testing.T) {
+	// 8 runes, 16 cells. Go's %-20s pads to 20 *runes* — 28 cells — which
+	// shoves every column to its right.
+	assert.Equal(t, 20, lipgloss.Width(padToWidth("日本語のタイトル", 20)))
+	assert.Equal(t, 20, lipgloss.Width(padToWidth("AbcdefghAbcdefgh", 20)))
+}

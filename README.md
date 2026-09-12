@@ -80,6 +80,7 @@ make build
 | <kbd>Esc</kbd> | Clear search / close active modal / back to library |
 | <kbd>a</kbd> | Add new download (Magnet link / URL) |
 | <kbd>d</kbd> / <kbd>x</kbd> | Delete selected download confirmation |
+| <kbd>p</kbd> | Pause / resume the selected download |
 | <kbd>r</kbd> | Refresh library list and Trakt watch history |
 | <kbd>A</kbd> | Open Trakt.tv OAuth device code pairing modal |
 | <kbd>?</kbd> | Toggle keyboard shortcuts help overlay |

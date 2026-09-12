@@ -781,7 +781,7 @@ func (m AppModel) renderLibraryList() string {
 			titleStyle = m.theme.ItemSelected
 		}
 
-		renderedTitle := titleStyle.Render(fmt.Sprintf("%-50s", title))
+		renderedTitle := titleStyle.Render(padToWidth(title, 50))
 		renderedSize := m.theme.ItemSize.Render(fmt.Sprintf("%9s", item.FormattedSize))
 
 		statusStr := item.DownloadState
@@ -791,7 +791,7 @@ func (m AppModel) renderLibraryList() string {
 		renderedStatus := statusStyle(m.theme, item.DownloadState).Render(fmt.Sprintf("%-10s", statusStr))
 
 		line := fmt.Sprintf("%s%s %s  %s  %s", cursorStr, badgeStr, renderedTitle, renderedSize, renderedStatus)
-		if metrics := renderMetrics(item); metrics != "" && m.width >= 100 {
+		if metrics := renderTransferStats(item); metrics != "" && m.width >= 100 {
 			line += "  " + m.theme.ItemSize.Render(metrics)
 		}
 		sb.WriteString(line)
@@ -986,7 +986,7 @@ func (w *outputTail) errorLine() string {
 	return truncateRunes(fallback, 100)
 }
 
-func renderMetrics(item LibraryItem) string {
+func renderTransferStats(item LibraryItem) string {
 	var parts []string
 	if item.Speed > 0 {
 		parts = append(parts, formatBytes(item.Speed)+"/s")
@@ -1021,6 +1021,13 @@ func statusStyle(theme Theme, downloadState string) lipgloss.Style {
 	default:
 		return theme.ItemStatusWarn
 	}
+}
+
+func padToWidth(s string, width int) string {
+	if gap := width - lipgloss.Width(s); gap > 0 {
+		return s + strings.Repeat(" ", gap)
+	}
+	return s
 }
 
 func truncateToWidth(s string, width int) string {
@@ -1145,8 +1152,13 @@ func (m AppModel) deleteCurrentItemCmd() tea.Cmd {
 
 func (m AppModel) controlCurrentItemCmd() tea.Cmd {
 	item := m.selectedCurrentItem()
-	if item == nil || m.torboxClient == nil {
+	if item == nil {
 		return nil
+	}
+	if m.torboxClient == nil {
+		return func() tea.Msg {
+			return StatusMsg{Text: "TorBox API key not configured", IsErr: true}
+		}
 	}
 
 	operation, verb := "pause", "Paused"
@@ -1166,6 +1178,8 @@ func (m AppModel) controlCurrentItemCmd() tea.Cmd {
 			err = m.torboxClient.ControlUsenet(ctx, torbox.ControlUsenetRequest{UsenetID: item.ID, Operation: operation})
 		case TabWebDL:
 			err = m.torboxClient.ControlWebDL(ctx, torbox.ControlWebDLRequest{WebDLID: item.ID, Operation: operation})
+		default:
+			return StatusMsg{Text: "Nothing here can be paused", IsErr: true}
 		}
 
 		if err != nil {
