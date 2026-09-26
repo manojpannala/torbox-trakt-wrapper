@@ -33,7 +33,6 @@ type Matcher struct {
 	playbackByEpisode map[string]*trakt.PlaybackItem
 	playbackByTraktID map[int]*trakt.PlaybackItem
 
-	// parseMu guards parseMemo alone, separate from mu.
 	parseMu   sync.RWMutex
 	parseMemo map[string]ParsedMedia
 

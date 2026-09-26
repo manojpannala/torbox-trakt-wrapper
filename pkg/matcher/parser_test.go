@@ -515,6 +515,20 @@ func TestParseMedia_ExhaustiveMatrix(t *testing.T) {
 			},
 		},
 		{
+			name:     "test_movie_dolby_vision_dot_separated",
+			filename: "Test.Movie.PsiTwo.2019.2160p.WEB-DL.Dolby.Vision.x265.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "Test Movie PsiTwo",
+				Type:       matcher.MediaTypeMovie,
+				Year:       2019,
+				Resolution: "2160p",
+				Source:     "webdl",
+				Codec:      "x265",
+				HDR:        "dolbyvision",
+			},
+			displayTitle: "Test Movie PsiTwo (2019)",
+		},
+		{
 			name:     "host_only_name_keeps_the_raw_text",
 			filename: "www.TestIndexer.com.mkv",
 			expected: matcher.ParsedMedia{

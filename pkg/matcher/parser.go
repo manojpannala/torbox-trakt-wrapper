@@ -127,7 +127,7 @@ func ParseMedia(rawName string) ParsedMedia {
 	if mayContainAny(cleanASCIILower, "hdr", "dv", "dovi", "dolby", "hlg") {
 		if match := hdrRegexCS.FindString(cleanASCIILower); match != "" {
 			parsed.HDR = normalizeTag(match)
-		} else if hasUnderscore {
+		} else if hasUnderscore || strings.Contains(cleanASCIILower, "dolby") {
 			if match := hdrRegexCS.FindString(normalizedASCIILower); match != "" {
 				parsed.HDR = normalizeTag(match)
 			}
