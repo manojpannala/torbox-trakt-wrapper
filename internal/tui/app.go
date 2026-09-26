@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
 
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/cache"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/player"
@@ -32,6 +33,8 @@ type AppModel struct {
 	matcher      *matcher.Matcher
 	player       player.Player
 	theme        Theme
+	store        *cache.Store
+	cachedAt     [3]time.Time
 
 	width  int
 	height int
@@ -63,6 +66,7 @@ type AppModel struct {
 
 type appOptions struct {
 	logger *slog.Logger
+	store  *cache.Store
 }
 
 type AppOption func(*appOptions)
@@ -73,6 +77,13 @@ func WithLogger(logger *slog.Logger) AppOption {
 		if logger != nil {
 			o.logger = logger
 		}
+	}
+}
+
+// WithCache renders from store on launch and writes it after every fetch.
+func WithCache(store *cache.Store) AppOption {
+	return func(o *appOptions) {
+		o.store = store
 	}
 }
 
@@ -145,7 +156,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		initialTab = TabWebDL
 	}
 
-	return AppModel{
+	m := AppModel{
 		ctx:          ctx,
 		cancel:       cancel,
 		cfg:          cfg,
@@ -154,6 +165,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		matcher:      matcherEngine,
 		player:       mpvPlayer,
 		theme:        theme,
+		store:        settings.store,
 		activeTab:    initialTab,
 		activeView:   ViewLibrary,
 		activeModal:  ModalNone,
@@ -164,14 +176,12 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		loading:      true,
 		statusText:   "Ready",
 	}
+	m.seedFromCache()
+	return m
 }
 
 func (m AppModel) Init() tea.Cmd {
-	return tea.Batch(
-		m.spinner.Tick,
-		m.fetchLibraryCmd(m.activeTab, true),
-		m.fetchTraktCatalogCmd(),
-	)
+	return tea.Batch(append([]tea.Cmd{m.spinner.Tick}, m.launchCmds()...)...)
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -207,18 +217,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case TorrentsLoadedMsg:
 		m.loading = false
+		m.cachedAt[TabTorrents] = time.Time{}
 		m.torrents = m.convertTorrents(msg.Torrents)
 		m.reapplyFilter()
 		return m, nil
 
 	case UsenetLoadedMsg:
 		m.loading = false
+		m.cachedAt[TabUsenet] = time.Time{}
 		m.usenet = m.convertUsenet(msg.Usenet)
 		m.reapplyFilter()
 		return m, nil
 
 	case WebDLLoadedMsg:
 		m.loading = false
+		m.cachedAt[TabWebDL] = time.Time{}
 		m.webdl = m.convertWebDL(msg.WebDL)
 		m.reapplyFilter()
 		return m, nil
@@ -912,18 +925,21 @@ func (m AppModel) fetchLibraryCmd(tab TabType, bypass bool) tea.Cmd {
 			if err != nil {
 				return LibraryFetchFailedMsg{Tab: tab, Err: err}
 			}
+			cache.Write(m.store, cache.TorBoxTorrents, torrents)
 			return TorrentsLoadedMsg{Torrents: torrents}
 		case TabUsenet:
 			usenet, err := m.torboxClient.GetUsenetList(ctx, bypass)
 			if err != nil {
 				return LibraryFetchFailedMsg{Tab: tab, Err: err}
 			}
+			cache.Write(m.store, cache.TorBoxUsenet, usenet)
 			return UsenetLoadedMsg{Usenet: usenet}
 		case TabWebDL:
 			webdl, err := m.torboxClient.GetWebDLList(ctx, bypass)
 			if err != nil {
 				return LibraryFetchFailedMsg{Tab: tab, Err: err}
 			}
+			cache.Write(m.store, cache.TorBoxWebDL, webdl)
 			return WebDLLoadedMsg{WebDL: webdl}
 		}
 		return nil
@@ -951,6 +967,7 @@ func (m AppModel) fetchTraktCatalogCmd() tea.Cmd {
 			return TraktCatalogFailedMsg{Err: err}
 		}
 
+		cache.Write(m.store, cache.TraktCatalog, traktCatalog{Movies: movies, Shows: shows, Playback: playback})
 		return TraktCatalogLoadedMsg{Movies: movies, Shows: shows, Playback: playback}
 	}
 }
