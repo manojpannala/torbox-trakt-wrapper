@@ -3,6 +3,8 @@
 package cache
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -44,6 +46,13 @@ type envelope struct {
 	Version  string          `json:"version"`
 	StoredAt int64           `json:"stored_at"`
 	Payload  json.RawMessage `json:"payload"`
+}
+
+// AccountVersion ties cached data to both the release and the account it
+// was fetched for, so one account's data is never read back under another.
+func AccountVersion(appVersion, account string) string {
+	sum := sha256.Sum256([]byte(account))
+	return appVersion + "+" + hex.EncodeToString(sum[:8])
 }
 
 func New(dir string, ttl time.Duration, version string, log *slog.Logger) *Store {

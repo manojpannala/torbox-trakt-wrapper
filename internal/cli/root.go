@@ -47,7 +47,8 @@ var rootCmd = &cobra.Command{
 
 		// The alt screen is set on the view itself; see tui.altScreenView.
 		ttl := time.Duration(cfg.TorBox.CacheTTLMinutes) * time.Minute
-		store := cache.New(config.GetCacheDir(), ttl, config.Version, logger)
+		version := cache.AccountVersion(config.Version, "torbox:"+cfg.TorBox.APIKey)
+		store := cache.New(config.GetCacheDir(), ttl, version, logger)
 		p := tea.NewProgram(tui.NewAppModel(ctx, cfg, tui.WithLogger(logger), tui.WithCache(store)))
 		_, err := p.Run()
 		return err

@@ -191,6 +191,30 @@ func TestNilStoreIsSafe(t *testing.T) {
 	})
 }
 
+func TestAccountVersion_DiffersPerAccountAndRelease(t *testing.T) {
+	base := cache.AccountVersion("v1.2.3", "torbox:key-A")
+
+	assert.Equal(t, base, cache.AccountVersion("v1.2.3", "torbox:key-A"))
+	assert.NotEqual(t, base, cache.AccountVersion("v1.2.3", "torbox:key-B"))
+	assert.NotEqual(t, base, cache.AccountVersion("v1.2.4", "torbox:key-A"))
+	assert.NotContains(t, base, "key-A")
+}
+
+func TestAccountVersion_KeepsAnotherAccountsDataOut(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "cache")
+	storeA := cache.New(dir, time.Hour, cache.AccountVersion(version, "torbox:key-A"), nil)
+	cache.Write(storeA, cache.TorBoxUsenet, []string{"a"})
+
+	storeB := cache.New(dir, time.Hour, cache.AccountVersion(version, "torbox:key-B"), nil)
+	_, ok := cache.Read[[]string](storeB, cache.TorBoxUsenet)
+	assert.False(t, ok, "account B must not see account A's cached data")
+
+	storeA2 := cache.New(dir, time.Hour, cache.AccountVersion(version, "torbox:key-A"), nil)
+	e, ok := cache.Read[[]string](storeA2, cache.TorBoxUsenet)
+	require.True(t, ok)
+	assert.Equal(t, []string{"a"}, e.Value)
+}
+
 func TestUnwritableDirectoryIsNotFatal(t *testing.T) {
 	blocker := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
