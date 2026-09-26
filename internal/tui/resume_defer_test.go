@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	enterKey = tea.KeyPressMsg{Code: tea.KeyEnter}
-	escKey   = tea.KeyPressMsg{Code: tea.KeyEscape}
-	downKey  = tea.KeyPressMsg{Code: 'j', Text: "j"}
-	helpKey  = tea.KeyPressMsg{Code: '?', Text: "?"}
+	enterKey  = tea.KeyPressMsg{Code: tea.KeyEnter}
+	escKey    = tea.KeyPressMsg{Code: tea.KeyEscape}
+	downKey   = tea.KeyPressMsg{Code: 'j', Text: "j"}
+	helpKey   = tea.KeyPressMsg{Code: '?', Text: "?"}
+	searchKey = tea.KeyPressMsg{Code: '/', Text: "/"}
 )
 
 func sendKey(m AppModel, k tea.KeyPressMsg) (AppModel, tea.Cmd) {
@@ -161,6 +162,48 @@ func TestDeferral_EscapeDuringAHeldLaunchClosesTheOpenModalInstead(t *testing.T)
 
 	m, _ = sendMsg(m, freshCatalog(70))
 
+	v := viewText(m)
+	assert.Contains(t, v, "Resume Playback")
+	assert.Contains(t, v, "about 70%")
+}
+
+func TestDeferral_HeldLaunchWaitsForHelpToClose(t *testing.T) {
+	m := deferModel(t, nil)
+	m, _ = sendKey(m, enterKey)
+
+	m, _ = sendKey(m, helpKey)
+	require.Equal(t, ModalHelp, m.activeModal)
+
+	m, cmd := sendMsg(m, freshCatalog(70))
+	require.NotNil(t, cmd, "an accepted catalog load must still return its cache-write command")
+	assert.Nil(t, cmd(), "no stream command until the dialog closes; the only pending command is the cache write")
+	assert.NotNil(t, m.heldLaunch, "help is still open, so the launch stays held")
+	assert.Equal(t, ModalHelp, m.activeModal, "help must stay open")
+
+	m, _ = sendKey(m, escKey)
+
+	assert.Nil(t, m.heldLaunch, "the launch releases as soon as help closes")
+	v := viewText(m)
+	assert.Contains(t, v, "Resume Playback")
+	assert.Contains(t, v, "about 70%")
+}
+
+func TestDeferral_HeldLaunchWaitsForSearchToClose(t *testing.T) {
+	m := deferModel(t, nil)
+	m, _ = sendKey(m, enterKey)
+
+	m, _ = sendKey(m, searchKey)
+	require.True(t, m.searchActive, "the / key must open search for this regression to be meaningful")
+
+	m, cmd := sendMsg(m, freshCatalog(70))
+	require.NotNil(t, cmd, "an accepted catalog load must still return its cache-write command")
+	assert.Nil(t, cmd(), "no stream command until the dialog closes; the only pending command is the cache write")
+	assert.NotNil(t, m.heldLaunch, "search is still open, so the launch stays held")
+	assert.True(t, m.searchActive, "search must stay open")
+
+	m, _ = sendKey(m, escKey)
+
+	assert.False(t, m.searchActive, "esc should close search")
 	v := viewText(m)
 	assert.Contains(t, v, "Resume Playback")
 	assert.Contains(t, v, "about 70%")

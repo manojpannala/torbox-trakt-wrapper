@@ -196,7 +196,23 @@ func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(append([]tea.Cmd{m.spinner.Tick}, m.launchCmds()...)...)
 }
 
+// Update runs the message through update, then releases a launch that was
+// held behind a dialog as soon as that dialog closes, however it closed (key,
+// Esc, submit, or a message such as an add-success). It must not release
+// while Trakt is still unsettled — that's the normal hold, resolved by the
+// TraktCatalogLoadedMsg/TraktCatalogFailedMsg handlers in update.
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	m = next.(AppModel)
+
+	var releaseCmd tea.Cmd
+	if m.heldLaunch != nil && !m.awaitingTrakt() && m.activeModal == ModalNone && !m.searchActive {
+		releaseCmd = m.releaseHeldLaunch()
+	}
+	return m, tea.Batch(cmd, releaseCmd)
+}
+
+func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {

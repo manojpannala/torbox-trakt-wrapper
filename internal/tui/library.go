@@ -139,7 +139,12 @@ func (m AppModel) awaitingTrakt() bool {
 	return !m.traktSettled && m.traktClient != nil && m.cfg.Trakt.HasAuth()
 }
 
+// releaseHeldLaunch leaves the launch held while a dialog is still open, so
+// the resume prompt it produces doesn't fight the dialog for the screen.
 func (m *AppModel) releaseHeldLaunch() tea.Cmd {
+	if m.activeModal != ModalNone || m.searchActive {
+		return nil
+	}
 	h := m.heldLaunch
 	m.heldLaunch = nil
 	if h == nil {
