@@ -32,12 +32,10 @@ var allKeys = []Key{TorBoxTorrents, TorBoxUsenet, TorBoxWebDL, TraktCatalog}
 type Entry[T any] struct {
 	Value    T
 	StoredAt time.Time
-	Fresh    bool
 }
 
 type Store struct {
 	dir     string
-	ttl     time.Duration
 	version string
 	log     *slog.Logger
 }
@@ -55,11 +53,11 @@ func AccountVersion(appVersion, account string) string {
 	return appVersion + "+" + hex.EncodeToString(sum[:8])
 }
 
-func New(dir string, ttl time.Duration, version string, log *slog.Logger) *Store {
+func New(dir string, version string, log *slog.Logger) *Store {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Store{dir: dir, ttl: ttl, version: version, log: log}
+	return &Store{dir: dir, version: version, log: log}
 }
 
 func (s *Store) path(key Key) string {
@@ -95,7 +93,6 @@ func Read[T any](s *Store, key Key) (Entry[T], bool) {
 	}
 
 	e.StoredAt = time.Unix(env.StoredAt, 0)
-	e.Fresh = s.ttl > 0 && time.Since(e.StoredAt) < s.ttl
 	return e, true
 }
 

@@ -29,7 +29,7 @@ var (
 func newTestStore(t *testing.T) (*cache.Store, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "cache")
-	return cache.New(dir, 15*time.Minute, config.Version, nil), dir
+	return cache.New(dir, config.Version, nil), dir
 }
 
 func playbackFor(title string, year int, pct float64) trakt.PlaybackItem {

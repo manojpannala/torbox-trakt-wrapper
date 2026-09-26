@@ -10,7 +10,7 @@ import (
 )
 
 func cacheStore() *cache.Store {
-	return cache.New(config.GetCacheDir(), 0, config.Version, logger)
+	return cache.New(config.GetCacheDir(), config.Version, logger)
 }
 
 func forget(keys ...cache.Key) {

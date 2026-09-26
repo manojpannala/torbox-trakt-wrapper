@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
@@ -46,9 +45,8 @@ var rootCmd = &cobra.Command{
 		defer stop()
 
 		// The alt screen is set on the view itself; see tui.altScreenView.
-		ttl := time.Duration(cfg.TorBox.CacheTTLMinutes) * time.Minute
 		version := cache.AccountVersion(config.Version, "torbox:"+cfg.TorBox.APIKey)
-		store := cache.New(config.GetCacheDir(), ttl, version, logger)
+		store := cache.New(config.GetCacheDir(), version, logger)
 		p := tea.NewProgram(tui.NewAppModel(ctx, cfg, tui.WithLogger(logger), tui.WithCache(store)))
 		_, err := p.Run()
 		return err

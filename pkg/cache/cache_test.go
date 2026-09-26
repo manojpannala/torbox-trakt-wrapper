@@ -17,10 +17,10 @@ import (
 
 const version = "v1.2.3"
 
-func newStore(t *testing.T, ttl time.Duration) (*cache.Store, string) {
+func newStore(t *testing.T) (*cache.Store, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "cache")
-	return cache.New(dir, ttl, version, nil), dir
+	return cache.New(dir, version, nil), dir
 }
 
 func writeEnvelope(t *testing.T, dir string, key cache.Key, ver string, storedAt time.Time, payload any) {
@@ -37,31 +37,29 @@ func writeEnvelope(t *testing.T, dir string, key cache.Key, ver string, storedAt
 	require.NoError(t, os.WriteFile(filepath.Join(dir, string(key)+".json"), data, 0o600))
 }
 
-func TestReadAfterWriteIsFresh(t *testing.T) {
-	s, _ := newStore(t, time.Hour)
+func TestReadAfterWriteReturnsTheStoredValue(t *testing.T) {
+	s, _ := newStore(t)
 	cache.Write(s, cache.TorBoxTorrents, []string{"a", "b"})
 
 	e, ok := cache.Read[[]string](s, cache.TorBoxTorrents)
 
 	require.True(t, ok)
 	assert.Equal(t, []string{"a", "b"}, e.Value)
-	assert.True(t, e.Fresh)
 	assert.WithinDuration(t, time.Now(), e.StoredAt, 2*time.Second)
 }
 
 func TestStaleEntryIsStillReturned(t *testing.T) {
-	s, dir := newStore(t, 15*time.Minute)
+	s, dir := newStore(t)
 	writeEnvelope(t, dir, cache.TorBoxUsenet, version, time.Now().Add(-time.Hour), []string{"old"})
 
 	e, ok := cache.Read[[]string](s, cache.TorBoxUsenet)
 
-	require.True(t, ok, "a stale hit is still worth rendering")
-	assert.False(t, e.Fresh)
+	require.True(t, ok, "an old file is still worth rendering; age is no longer a miss")
 	assert.Equal(t, []string{"old"}, e.Value)
 }
 
 func TestMissingKeyIsAMiss(t *testing.T) {
-	s, _ := newStore(t, time.Hour)
+	s, _ := newStore(t)
 
 	_, ok := cache.Read[[]string](s, cache.TorBoxWebDL)
 
@@ -69,7 +67,7 @@ func TestMissingKeyIsAMiss(t *testing.T) {
 }
 
 func TestCorruptFileIsAMiss(t *testing.T) {
-	s, dir := newStore(t, time.Hour)
+	s, dir := newStore(t)
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "torbox-torrents.json"), []byte("{not json"), 0o600))
 
@@ -79,7 +77,7 @@ func TestCorruptFileIsAMiss(t *testing.T) {
 }
 
 func TestWrongPayloadShapeIsAMiss(t *testing.T) {
-	s, dir := newStore(t, time.Hour)
+	s, dir := newStore(t)
 	writeEnvelope(t, dir, cache.TorBoxTorrents, version, time.Now(), map[string]int{"x": 1})
 
 	_, ok := cache.Read[[]string](s, cache.TorBoxTorrents)
@@ -88,7 +86,7 @@ func TestWrongPayloadShapeIsAMiss(t *testing.T) {
 }
 
 func TestVersionMismatchIsAMiss(t *testing.T) {
-	s, dir := newStore(t, time.Hour)
+	s, dir := newStore(t)
 	writeEnvelope(t, dir, cache.TraktCatalog, "v0.0.1", time.Now(), []string{"x"})
 
 	_, ok := cache.Read[[]string](s, cache.TraktCatalog)
@@ -96,18 +94,8 @@ func TestVersionMismatchIsAMiss(t *testing.T) {
 	assert.False(t, ok, "a file from another release may decode into partly-zeroed structs")
 }
 
-func TestZeroTTLIsNeverFresh(t *testing.T) {
-	s, _ := newStore(t, 0)
-	cache.Write(s, cache.TorBoxTorrents, []string{"a"})
-
-	e, ok := cache.Read[[]string](s, cache.TorBoxTorrents)
-
-	require.True(t, ok)
-	assert.False(t, e.Fresh)
-}
-
 func TestEmptyPayloadOverwrites(t *testing.T) {
-	s, _ := newStore(t, time.Hour)
+	s, _ := newStore(t)
 	cache.Write(s, cache.TorBoxTorrents, []string{"deleted-later"})
 	cache.Write(s, cache.TorBoxTorrents, []string{})
 
@@ -118,7 +106,7 @@ func TestEmptyPayloadOverwrites(t *testing.T) {
 }
 
 func TestPermissions(t *testing.T) {
-	s, dir := newStore(t, time.Hour)
+	s, dir := newStore(t)
 	cache.Write(s, cache.TorBoxTorrents, []string{"a"})
 
 	fi, err := os.Stat(filepath.Join(dir, "torbox-torrents.json"))
@@ -131,7 +119,7 @@ func TestPermissions(t *testing.T) {
 }
 
 func TestConcurrentWritersNeverLeaveATornFile(t *testing.T) {
-	s, dir := newStore(t, time.Hour)
+	s, dir := newStore(t)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 32; i++ {
@@ -153,7 +141,7 @@ func TestConcurrentWritersNeverLeaveATornFile(t *testing.T) {
 }
 
 func TestInvalidateRemovesOneKey(t *testing.T) {
-	s, _ := newStore(t, time.Hour)
+	s, _ := newStore(t)
 	cache.Write(s, cache.TorBoxTorrents, []string{"a"})
 	cache.Write(s, cache.TraktCatalog, []string{"b"})
 
@@ -166,7 +154,7 @@ func TestInvalidateRemovesOneKey(t *testing.T) {
 }
 
 func TestClearRemovesEverythingIncludingLeftoverTempFiles(t *testing.T) {
-	s, dir := newStore(t, time.Hour)
+	s, dir := newStore(t)
 	for _, k := range []cache.Key{cache.TorBoxTorrents, cache.TorBoxUsenet, cache.TorBoxWebDL, cache.TraktCatalog} {
 		cache.Write(s, k, []string{"x"})
 	}
@@ -202,14 +190,14 @@ func TestAccountVersion_DiffersPerAccountAndRelease(t *testing.T) {
 
 func TestAccountVersion_KeepsAnotherAccountsDataOut(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "cache")
-	storeA := cache.New(dir, time.Hour, cache.AccountVersion(version, "torbox:key-A"), nil)
+	storeA := cache.New(dir, cache.AccountVersion(version, "torbox:key-A"), nil)
 	cache.Write(storeA, cache.TorBoxUsenet, []string{"a"})
 
-	storeB := cache.New(dir, time.Hour, cache.AccountVersion(version, "torbox:key-B"), nil)
+	storeB := cache.New(dir, cache.AccountVersion(version, "torbox:key-B"), nil)
 	_, ok := cache.Read[[]string](storeB, cache.TorBoxUsenet)
 	assert.False(t, ok, "account B must not see account A's cached data")
 
-	storeA2 := cache.New(dir, time.Hour, cache.AccountVersion(version, "torbox:key-A"), nil)
+	storeA2 := cache.New(dir, cache.AccountVersion(version, "torbox:key-A"), nil)
 	e, ok := cache.Read[[]string](storeA2, cache.TorBoxUsenet)
 	require.True(t, ok)
 	assert.Equal(t, []string{"a"}, e.Value)
@@ -218,7 +206,7 @@ func TestAccountVersion_KeepsAnotherAccountsDataOut(t *testing.T) {
 func TestUnwritableDirectoryIsNotFatal(t *testing.T) {
 	blocker := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
-	s := cache.New(filepath.Join(blocker, "cache"), time.Hour, version, nil)
+	s := cache.New(filepath.Join(blocker, "cache"), version, nil)
 
 	assert.NotPanics(t, func() { cache.Write(s, cache.TorBoxTorrents, []string{"a"}) })
 	_, ok := cache.Read[[]string](s, cache.TorBoxTorrents)

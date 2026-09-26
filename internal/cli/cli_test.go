@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -256,7 +255,7 @@ var allCacheKeys = []cache.Key{cache.TorBoxTorrents, cache.TorBoxUsenet, cache.T
 func seedCache(t *testing.T) *cache.Store {
 	t.Helper()
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	store := cache.New(config.GetCacheDir(), time.Hour, config.Version, nil)
+	store := cache.New(config.GetCacheDir(), config.Version, nil)
 	for _, k := range allCacheKeys {
 		cache.Write(store, k, []string{"x"})
 	}
