@@ -33,16 +33,40 @@ type Matcher struct {
 	playbackByEpisode map[string]*trakt.PlaybackItem
 	playbackByTraktID map[int]*trakt.PlaybackItem
 
+	// parseMu guards parseMemo alone, separate from mu.
+	parseMu   sync.RWMutex
+	parseMemo map[string]ParsedMedia
+
 	scrobbleThreshold float64
 }
 
+// parseMediaFunc lets tests count parses without a production counter.
+var parseMediaFunc = ParseMedia
+
 func NewMatcher(movies []trakt.WatchedMovie, shows []trakt.WatchedShow, playback []trakt.PlaybackItem, opts ...Option) *Matcher {
-	m := &Matcher{scrobbleThreshold: DefaultScrobbleThreshold}
+	m := &Matcher{scrobbleThreshold: DefaultScrobbleThreshold, parseMemo: make(map[string]ParsedMedia)}
 	for _, opt := range opts {
 		opt(m)
 	}
 	m.UpdateCatalog(movies, shows, playback)
 	return m
+}
+
+// Parse memoises ParseMedia; it survives UpdateCatalog since a parse doesn't depend on the catalog.
+func (m *Matcher) Parse(name string) ParsedMedia {
+	m.parseMu.RLock()
+	parsed, ok := m.parseMemo[name]
+	m.parseMu.RUnlock()
+	if ok {
+		return parsed
+	}
+
+	parsed = parseMediaFunc(name)
+
+	m.parseMu.Lock()
+	m.parseMemo[name] = parsed
+	m.parseMu.Unlock()
+	return parsed
 }
 
 func (m *Matcher) UpdateCatalog(movies []trakt.WatchedMovie, shows []trakt.WatchedShow, playback []trakt.PlaybackItem) {
@@ -110,7 +134,7 @@ func (m *Matcher) UpdateCatalog(movies []trakt.WatchedMovie, shows []trakt.Watch
 }
 
 func (m *Matcher) MatchFile(filename string) MatchResult {
-	parsed := ParseMedia(filename)
+	parsed := m.Parse(filename)
 	return m.MatchParsed(parsed)
 }
 

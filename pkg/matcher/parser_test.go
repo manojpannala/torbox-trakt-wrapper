@@ -450,6 +450,20 @@ func TestParseMedia_ExhaustiveMatrix(t *testing.T) {
 			displayTitle: "Test Feature Chi (2019)",
 		},
 		{
+			name:     "site_prefixed_movie_leading_newline",
+			filename: "\nwww.TestIndexer.org - Test Feature Chi (2019) 1080p BluRay x264 AAC.mkv",
+			expected: matcher.ParsedMedia{
+				CleanTitle: "Test Feature Chi",
+				Type:       matcher.MediaTypeMovie,
+				Year:       2019,
+				Resolution: "1080p",
+				Source:     "bluray",
+				Codec:      "x264",
+				Audio:      "aac",
+			},
+			displayTitle: "Test Feature Chi (2019)",
+		},
+		{
 			name:     "site_prefixed_episode",
 			filename: "www.TestTracker.company - Test.Series.Chi.S02E05.1080p.WEB-DL.mkv",
 			expected: matcher.ParsedMedia{

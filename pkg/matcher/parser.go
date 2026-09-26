@@ -9,8 +9,10 @@ import (
 	"unicode"
 )
 
+// knownExtensions are checked as a plain suffix instead of a regex, which measurably cut per-call overhead.
+var knownExtensions = []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".m2ts", ".ts", ".iso"}
+
 var (
-	extRegex              = regexp.MustCompile(`(?i)\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|ts|m2ts|iso)$`)
 	groupPrefixRegex      = regexp.MustCompile(`^\[([a-zA-Z0-9_\-\.\s]+)\]\s*`)
 	groupSuffixRegex      = regexp.MustCompile(`-([a-zA-Z0-9_]+)(?:\.[a-zA-Z0-9]+)?$`)
 	seasonEpRegex         = regexp.MustCompile(`(?i)[sS](\d{1,2})[eE](\d{1,3})(?:(?:-(?:[eE])?|[eE])(\d{1,3}))?`)
@@ -30,7 +32,19 @@ var (
 	anyBracketedRegex     = regexp.MustCompile(`\[[^\]]*\]`)
 	latinRunRegex         = regexp.MustCompile(`[A-Za-z0-9][A-Za-z0-9'&:,.!?\- ]{2,}`)
 	trailingYearRegex     = regexp.MustCompile(`[\s._\-]\(?(19\d\d|20\d\d)\)?$`)
+
+	// *CS regexes drop the (?i) of their counterparts, matched against an ASCII-lowered copy instead: (?i) pays for Unicode case-fold tables a pre-lowered match doesn't need.
+	resolutionRegexCS = regexp.MustCompile(`\b(2160p|4k|uhd|1080p|1080i|720p|576p|480p)\b`)
+	sourceRegexCS     = regexp.MustCompile(`\b(remux|blu-?ray|bluray|bd-?rip|brrip|web-?dl|web-?rip|webrip|webdl|hdtv|dvd-?rip|dvd)\b`)
+	codecRegexCS      = regexp.MustCompile(`\b(x265|x264|h\.?265|h\.?264|hevc|avc|av1|xvid|divx|10bit|8bit)\b`)
+	audioRegexCS      = regexp.MustCompile(`\b(truehd(?:\.?atmos)?|atmos|dts-?hd(?:\.?ma)?|dts-?ma|dts|ddp\s*5[._]1|dd\+?\s*5[._]1|dd\s*5[._]1|eac3|ac3|flac|aac(?:\s*5[._]1|\s*2[._]0)?|7[._]1|5[._]1|2[._]0)\b`)
+	hdrRegexCS        = regexp.MustCompile(`\b(hdr10\+|hdr10|hdr|dv|dovi|dolby\s*vision|hlg)\b`)
 )
+
+// tagHints tells stripTags which categories ParseMedia found nowhere in the full name, so a substring can't have them either.
+type tagHints struct {
+	resolution, source, codec, audio, hdr bool
+}
 
 func ParseMedia(rawName string) ParsedMedia {
 	parsed := ParsedMedia{
@@ -39,7 +53,7 @@ func ParseMedia(rawName string) ParsedMedia {
 	}
 
 	filename := filepath.Base(rawName)
-	clean := extRegex.ReplaceAllString(filename, "")
+	clean := stripKnownExtension(filename)
 	clean = stripSiteMarkers(clean)
 
 	if match := groupPrefixRegex.FindStringSubmatch(clean); len(match) > 1 {
@@ -66,34 +80,66 @@ func ParseMedia(rawName string) ParsedMedia {
 	}
 
 	normalizedSpaced := normalizeDelimiters(clean)
-	cleanLower := strings.ToLower(clean)
 
-	if match := resolutionRegex.FindString(normalizedSpaced); match != "" {
-		parsed.Resolution = normalizeTag(match)
+	// Only '_' changes a tag's word-boundary outcome vs. clean; '.' doesn't.
+	hasUnderscore := strings.IndexByte(clean, '_') >= 0
+
+	cleanASCIILower := toLowerASCII(clean)
+	normalizedASCIILower := toLowerASCII(normalizedSpaced)
+
+	if mayContainAny(cleanASCIILower, "2160p", "4k", "uhd", "1080p", "1080i", "720p", "576p", "480p") {
+		if match := resolutionRegexCS.FindString(normalizedASCIILower); match != "" {
+			parsed.Resolution = normalizeTag(match)
+		}
 	}
-	if match := sourceRegex.FindString(clean); match != "" {
-		parsed.Source = normalizeTag(match)
-	} else if match := sourceRegex.FindString(normalizedSpaced); match != "" {
-		parsed.Source = normalizeTag(match)
+	if mayContainAny(cleanASCIILower, "remux", "bluray", "blu-ray", "bdrip", "bd-rip", "brrip", "webdl", "web-dl", "webrip", "web-rip", "hdtv", "dvd") {
+		if match := sourceRegexCS.FindString(cleanASCIILower); match != "" {
+			parsed.Source = normalizeTag(match)
+		} else if hasUnderscore {
+			if match := sourceRegexCS.FindString(normalizedASCIILower); match != "" {
+				parsed.Source = normalizeTag(match)
+			}
+		}
 	}
-	if match := codecRegex.FindString(clean); match != "" {
-		parsed.Codec = normalizeTag(match)
-	} else if match := codecRegex.FindString(normalizedSpaced); match != "" {
-		parsed.Codec = normalizeTag(match)
+	if mayContainAny(cleanASCIILower, "x265", "x264", "h265", "h264", "h.265", "h.264", "hevc", "avc", "av1", "xvid", "divx", "10bit", "8bit") {
+		if match := codecRegexCS.FindString(cleanASCIILower); match != "" {
+			parsed.Codec = normalizeTag(match)
+		} else if hasUnderscore {
+			if match := codecRegexCS.FindString(normalizedASCIILower); match != "" {
+				parsed.Codec = normalizeTag(match)
+			}
+		}
 	}
 
-	if strings.Contains(cleanLower, "truehd") && strings.Contains(cleanLower, "atmos") {
+	if strings.Contains(cleanASCIILower, "truehd") && strings.Contains(cleanASCIILower, "atmos") {
 		parsed.Audio = "truehdatmos"
-	} else if match := audioRegex.FindString(clean); match != "" {
-		parsed.Audio = normalizeTag(match)
-	} else if match := audioRegex.FindString(normalizedSpaced); match != "" {
-		parsed.Audio = normalizeTag(match)
+	} else if mayContainAny(cleanASCIILower, "truehd", "atmos", "dts", "dd", "ac3", "flac", "aac") ||
+		hasDigitPair(clean, '7', '1') || hasDigitPair(clean, '5', '1') || hasDigitPair(clean, '2', '0') {
+		if match := audioRegexCS.FindString(cleanASCIILower); match != "" {
+			parsed.Audio = normalizeTag(match)
+		} else if hasUnderscore {
+			if match := audioRegexCS.FindString(normalizedASCIILower); match != "" {
+				parsed.Audio = normalizeTag(match)
+			}
+		}
 	}
 
-	if match := hdrRegex.FindString(clean); match != "" {
-		parsed.HDR = normalizeTag(match)
-	} else if match := hdrRegex.FindString(normalizedSpaced); match != "" {
-		parsed.HDR = normalizeTag(match)
+	if mayContainAny(cleanASCIILower, "hdr", "dv", "dovi", "dolby", "hlg") {
+		if match := hdrRegexCS.FindString(cleanASCIILower); match != "" {
+			parsed.HDR = normalizeTag(match)
+		} else if hasUnderscore {
+			if match := hdrRegexCS.FindString(normalizedASCIILower); match != "" {
+				parsed.HDR = normalizeTag(match)
+			}
+		}
+	}
+
+	hints := tagHints{
+		resolution: parsed.Resolution != "",
+		source:     parsed.Source != "",
+		codec:      parsed.Codec != "",
+		audio:      parsed.Audio != "",
+		hdr:        parsed.HDR != "",
 	}
 
 	if loc := seasonEpRegex.FindStringSubmatchIndex(clean); len(loc) >= 6 {
@@ -108,25 +154,30 @@ func ParseMedia(rawName string) ParsedMedia {
 		parsed.Type = MediaTypeEpisode
 
 		titlePart := clean[:loc[0]]
-		parsed.CleanTitle = sanitizeTitle(titlePart)
-	} else if loc := explicitSeasonEpRegex.FindStringSubmatchIndex(clean); len(loc) >= 6 {
-		seasonStr := clean[loc[2]:loc[3]]
-		epStr := clean[loc[4]:loc[5]]
-		parsed.Season, _ = strconv.Atoi(seasonStr)
-		parsed.Episode, _ = strconv.Atoi(epStr)
-		parsed.Type = MediaTypeEpisode
+		parsed.CleanTitle = sanitizeTitle(titlePart, hints)
+	} else if strings.Contains(cleanASCIILower, "season") {
+		if loc := explicitSeasonEpRegex.FindStringSubmatchIndex(clean); len(loc) >= 6 {
+			seasonStr := clean[loc[2]:loc[3]]
+			epStr := clean[loc[4]:loc[5]]
+			parsed.Season, _ = strconv.Atoi(seasonStr)
+			parsed.Episode, _ = strconv.Atoi(epStr)
+			parsed.Type = MediaTypeEpisode
 
-		titlePart := clean[:loc[0]]
-		parsed.CleanTitle = sanitizeTitle(titlePart)
-	} else if loc := altSeasonEpRegex.FindStringSubmatchIndex(clean); len(loc) >= 6 {
-		seasonStr := clean[loc[2]:loc[3]]
-		epStr := clean[loc[4]:loc[5]]
-		parsed.Season, _ = strconv.Atoi(seasonStr)
-		parsed.Episode, _ = strconv.Atoi(epStr)
-		parsed.Type = MediaTypeEpisode
+			titlePart := clean[:loc[0]]
+			parsed.CleanTitle = sanitizeTitle(titlePart, hints)
+		}
+	}
+	if parsed.Type == MediaTypeUnknown {
+		if loc := altSeasonEpRegex.FindStringSubmatchIndex(clean); len(loc) >= 6 {
+			seasonStr := clean[loc[2]:loc[3]]
+			epStr := clean[loc[4]:loc[5]]
+			parsed.Season, _ = strconv.Atoi(seasonStr)
+			parsed.Episode, _ = strconv.Atoi(epStr)
+			parsed.Type = MediaTypeEpisode
 
-		titlePart := clean[:loc[0]]
-		parsed.CleanTitle = sanitizeTitle(titlePart)
+			titlePart := clean[:loc[0]]
+			parsed.CleanTitle = sanitizeTitle(titlePart, hints)
+		}
 	}
 
 	if parsed.Type == MediaTypeUnknown {
@@ -152,12 +203,12 @@ func ParseMedia(rawName string) ParsedMedia {
 			parsed.Type = MediaTypeMovie
 
 			titlePart := normalizedSpaced[:yearIndex]
-			parsed.CleanTitle = sanitizeTitle(titlePart)
+			parsed.CleanTitle = sanitizeTitle(titlePart, hints)
 		}
 	}
 
 	if parsed.Type == MediaTypeUnknown {
-		trimmed := stripTags(normalizedSpaced, false)
+		trimmed := stripTags(normalizedSpaced, false, hints)
 
 		if parts := strings.Split(trimmed, " - "); len(parts) >= 2 {
 			epCandidate := strings.TrimSpace(parts[len(parts)-1])
@@ -167,7 +218,7 @@ func ParseMedia(rawName string) ParsedMedia {
 					parsed.Season = 1
 					parsed.Episode = epNum
 					titlePart := strings.Join(parts[:len(parts)-1], " - ")
-					parsed.CleanTitle = sanitizeTitle(titlePart)
+					parsed.CleanTitle = sanitizeTitle(titlePart, hints)
 				}
 			}
 		}
@@ -181,7 +232,7 @@ func ParseMedia(rawName string) ParsedMedia {
 	}
 
 	if parsed.CleanTitle == "" {
-		parsed.CleanTitle = sanitizeTitle(normalizedSpaced)
+		parsed.CleanTitle = sanitizeTitle(normalizedSpaced, hints)
 		if parsed.Type == MediaTypeUnknown {
 			parsed.Type = MediaTypeMovie
 		}
@@ -195,20 +246,104 @@ func ParseMedia(rawName string) ParsedMedia {
 // tags written in a non-Latin script. The input is returned untouched when
 // stripping would leave nothing behind.
 func stripSiteMarkers(s string) string {
-	out := sitePrefixRegex.ReplaceAllString(s, "")
-	out = fullWidthBannerRegex.ReplaceAllString(out, " ")
-	out = anyBracketedRegex.ReplaceAllStringFunc(out, func(tag string) string {
-		if hasNonLatinScript(tag) {
-			return " "
-		}
-		return tag
-	})
+	out := s
+	if hasSitePrefixMarker(out) {
+		out = sitePrefixRegex.ReplaceAllString(out, "")
+	}
+	if strings.ContainsRune(out, fullWidthBannerOpen) {
+		out = fullWidthBannerRegex.ReplaceAllString(out, " ")
+	}
+	if strings.IndexByte(out, '[') >= 0 {
+		out = anyBracketedRegex.ReplaceAllStringFunc(out, func(tag string) string {
+			if hasNonLatinScript(tag) {
+				return " "
+			}
+			return tag
+		})
+	}
 
 	out = strings.TrimSpace(out)
 	if out == "" {
 		return s
 	}
 	return out
+}
+
+func stripKnownExtension(s string) string {
+	for _, ext := range knownExtensions {
+		if hasSuffixFoldASCII(s, ext) {
+			return s[:len(s)-len(ext)]
+		}
+	}
+	return s
+}
+
+// hasSuffixFoldASCII: suffix must already be lowercase.
+func hasSuffixFoldASCII(s, suffix string) bool {
+	if len(s) < len(suffix) {
+		return false
+	}
+	off := len(s) - len(suffix)
+	for i := 0; i < len(suffix); i++ {
+		c := s[off+i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		if c != suffix[i] {
+			return false
+		}
+	}
+	return true
+}
+
+const fullWidthBannerOpen = '【'
+
+// hasSitePrefixMarker is a superset check for sitePrefixRegex's leading `^\s*www\.`.
+func hasSitePrefixMarker(s string) bool {
+	s = strings.TrimLeft(s, " \t\n\r\f\v")
+	return len(s) >= 4 &&
+		s[0]|0x20 == 'w' && s[1]|0x20 == 'w' && s[2]|0x20 == 'w' && s[3] == '.'
+}
+
+// toLowerASCII lowercases only ASCII letters, so it can't corrupt a multi-byte UTF-8 rune.
+func toLowerASCII(s string) string {
+	hasUpper := false
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			hasUpper = true
+			break
+		}
+	}
+	if !hasUpper {
+		return s
+	}
+	b := []byte(s)
+	for i := range b {
+		if b[i] >= 'A' && b[i] <= 'Z' {
+			b[i] += 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// mayContainAny: a regex needing one of words can't match if none are in asciiLower.
+func mayContainAny(asciiLower string, words ...string) bool {
+	for _, w := range words {
+		if strings.Contains(asciiLower, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasDigitPair matches audioRegex's bare channel-count form, e.g. 7.1/7_1.
+func hasDigitPair(s string, a, b byte) bool {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] == a && (s[i+1] == '.' || s[i+1] == '_') && s[i+2] == b {
+			return true
+		}
+	}
+	return false
 }
 
 // splitTrailingYear pulls a release year off the end of a title, where it is
@@ -282,24 +417,38 @@ func normalizeDelimiters(s string) string {
 	return sb.String()
 }
 
-func stripTags(s string, includeHDR bool) string {
-	s = bracketedTagRegex.ReplaceAllString(s, " ")
-	s = sceneTagsRegex.ReplaceAllString(s, " ")
-	s = resolutionRegex.ReplaceAllString(s, " ")
-	s = sourceRegex.ReplaceAllString(s, " ")
-	s = codecRegex.ReplaceAllString(s, " ")
-	s = audioRegex.ReplaceAllString(s, " ")
-	if includeHDR {
+func stripTags(s string, includeHDR bool, hints tagHints) string {
+	if strings.IndexByte(s, '[') >= 0 {
+		s = bracketedTagRegex.ReplaceAllString(s, " ")
+	}
+	if mayContainAny(toLowerASCII(s), "proper", "repack", "extended", "unrated", "cut", "imax", "multi", "dual",
+		"complete", "internal", "subbed", "dubbed", "amzn", "nf", "dsnp", "hmax", "atvp", "apple", "criterion") &&
+		sceneTagsRegex.MatchString(s) {
+		s = sceneTagsRegex.ReplaceAllString(s, " ")
+	}
+	if hints.resolution {
+		s = resolutionRegex.ReplaceAllString(s, " ")
+	}
+	if hints.source {
+		s = sourceRegex.ReplaceAllString(s, " ")
+	}
+	if hints.codec {
+		s = codecRegex.ReplaceAllString(s, " ")
+	}
+	if hints.audio {
+		s = audioRegex.ReplaceAllString(s, " ")
+	}
+	if includeHDR && hints.hdr {
 		s = hdrRegex.ReplaceAllString(s, " ")
 	}
 	return s
 }
 
-func sanitizeTitle(title string) string {
+func sanitizeTitle(title string, hints tagHints) string {
 	s := strings.ReplaceAll(title, ".", " ")
 	s = strings.ReplaceAll(s, "_", " ")
 
-	s = stripTags(s, true)
+	s = stripTags(s, true, hints)
 
 	words := strings.Fields(s)
 	result := strings.Join(words, " ")

@@ -670,7 +670,7 @@ func (m *AppModel) reapplyFilter() {
 func (m *AppModel) convertTorrents(items []torbox.Torrent) []LibraryItem {
 	res := make([]LibraryItem, len(items))
 	for i, t := range items {
-		parsed := matcher.ParseMedia(t.Name)
+		parsed := m.matcher.Parse(t.Name)
 		matchRes := m.matcher.MatchParsed(parsed)
 
 		var badge string
@@ -716,7 +716,7 @@ func (m *AppModel) convertTorrents(items []torbox.Torrent) []LibraryItem {
 func (m *AppModel) convertUsenet(items []torbox.UsenetItem) []LibraryItem {
 	res := make([]LibraryItem, len(items))
 	for i, u := range items {
-		parsed := matcher.ParseMedia(u.Name)
+		parsed := m.matcher.Parse(u.Name)
 		matchRes := m.matcher.MatchParsed(parsed)
 
 		res[i] = LibraryItem{
@@ -743,7 +743,7 @@ func (m *AppModel) convertUsenet(items []torbox.UsenetItem) []LibraryItem {
 func (m *AppModel) convertWebDL(items []torbox.WebDLItem) []LibraryItem {
 	res := make([]LibraryItem, len(items))
 	for i, w := range items {
-		parsed := matcher.ParseMedia(w.Name)
+		parsed := m.matcher.Parse(w.Name)
 		matchRes := m.matcher.MatchParsed(parsed)
 
 		res[i] = LibraryItem{

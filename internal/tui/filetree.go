@@ -30,6 +30,14 @@ type FileTreeModel struct {
 	Width      int
 }
 
+// parseFile falls back to ParseMedia when matcherEngine is nil.
+func parseFile(matcherEngine *matcher.Matcher, name string) matcher.ParsedMedia {
+	if matcherEngine != nil {
+		return matcherEngine.Parse(name)
+	}
+	return matcher.ParseMedia(name)
+}
+
 func NewFileTreeModel(parent *LibraryItem, matcherEngine *matcher.Matcher) FileTreeModel {
 	ft := FileTreeModel{
 		ParentItem: parent,
@@ -43,7 +51,7 @@ func NewFileTreeModel(parent *LibraryItem, matcherEngine *matcher.Matcher) FileT
 
 	if len(parent.TorrentFiles) > 0 {
 		for _, f := range parent.TorrentFiles {
-			parsed := matcher.ParseMedia(f.Name)
+			parsed := parseFile(matcherEngine, f.Name)
 			var badge string
 			var status matcher.WatchStatus
 			var progress float64
@@ -69,7 +77,7 @@ func NewFileTreeModel(parent *LibraryItem, matcherEngine *matcher.Matcher) FileT
 		}
 	} else if len(parent.UsenetFiles) > 0 {
 		for _, f := range parent.UsenetFiles {
-			parsed := matcher.ParseMedia(f.Name)
+			parsed := parseFile(matcherEngine, f.Name)
 			var badge string
 			var status matcher.WatchStatus
 			var progress float64
@@ -95,7 +103,7 @@ func NewFileTreeModel(parent *LibraryItem, matcherEngine *matcher.Matcher) FileT
 		}
 	} else if len(parent.WebDLFiles) > 0 {
 		for _, f := range parent.WebDLFiles {
-			parsed := matcher.ParseMedia(f.Name)
+			parsed := parseFile(matcherEngine, f.Name)
 			var badge string
 			var status matcher.WatchStatus
 			var progress float64
