@@ -230,7 +230,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	var lastErr error
 	attempts := c.maxRetries + 1
 
-	for attempt := 0; attempt < attempts; attempt++ {
+	for attempt := range attempts {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():

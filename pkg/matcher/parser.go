@@ -3,6 +3,7 @@ package matcher
 import (
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -187,8 +188,7 @@ func ParseMedia(rawName string) ParsedMedia {
 		var matchedYear int
 		var yearIndex = -1
 
-		for i := len(yearMatches) - 1; i >= 0; i-- {
-			yIdx := yearMatches[i]
+		for _, yIdx := range slices.Backward(yearMatches) {
 			yVal, _ := strconv.Atoi(normalizedSpaced[yIdx[0]:yIdx[1]])
 
 			if yVal >= 1900 && yVal <= currentYear+2 {
