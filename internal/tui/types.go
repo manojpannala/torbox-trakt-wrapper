@@ -130,3 +130,12 @@ type StatusMsg struct {
 }
 
 type RefreshDataMsg struct{}
+
+type LibraryFetchFailedMsg struct {
+	Tab TabType
+	Err error
+}
+
+type TraktCatalogFailedMsg struct {
+	Err error
+}

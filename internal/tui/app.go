@@ -169,7 +169,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
-		m.fetchLibraryCmd(),
+		m.fetchLibraryCmd(m.activeTab, true),
 		m.fetchTraktCatalogCmd(),
 	)
 }
@@ -227,6 +227,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.matcher.UpdateCatalog(msg.Movies, msg.Shows, msg.Playback)
 		m.recalculateBadges()
 		m.reapplyFilter()
+		return m, nil
+
+	case LibraryFetchFailedMsg:
+		m.loading = false
+		noun := "torrents"
+		switch msg.Tab {
+		case TabUsenet:
+			noun = "usenet"
+		case TabWebDL:
+			noun = "webdl"
+		}
+		m.statusText = fmt.Sprintf("Failed to load %s: %v", noun, msg.Err)
+		m.isStatusErr = true
+		return m, nil
+
+	case TraktCatalogFailedMsg:
 		return m, nil
 
 	case DeviceCodeGeneratedMsg:
@@ -463,7 +479,7 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.loading = true
 		m.statusText = "Refreshing library..."
-		return m, tea.Batch(m.fetchLibraryCmd(), m.fetchTraktCatalogCmd())
+		return m, tea.Batch(m.fetchLibraryCmd(m.activeTab, true), m.fetchTraktCatalogCmd())
 
 	case "a":
 		m.addModal = NewAddModal()
@@ -882,7 +898,7 @@ func (m AppModel) renderFooter() string {
 	)
 }
 
-func (m AppModel) fetchLibraryCmd() tea.Cmd {
+func (m AppModel) fetchLibraryCmd(tab TabType, bypass bool) tea.Cmd {
 	return func() tea.Msg {
 		if m.torboxClient == nil {
 			return StatusMsg{Text: "TorBox API key not configured", IsErr: true}
@@ -890,23 +906,23 @@ func (m AppModel) fetchLibraryCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		switch m.activeTab {
+		switch tab {
 		case TabTorrents:
-			torrents, err := m.torboxClient.GetTorrents(ctx, true)
+			torrents, err := m.torboxClient.GetTorrents(ctx, bypass)
 			if err != nil {
-				return StatusMsg{Text: fmt.Sprintf("Failed to load torrents: %v", err), IsErr: true}
+				return LibraryFetchFailedMsg{Tab: tab, Err: err}
 			}
 			return TorrentsLoadedMsg{Torrents: torrents}
 		case TabUsenet:
-			usenet, err := m.torboxClient.GetUsenetList(ctx, true)
+			usenet, err := m.torboxClient.GetUsenetList(ctx, bypass)
 			if err != nil {
-				return StatusMsg{Text: fmt.Sprintf("Failed to load usenet: %v", err), IsErr: true}
+				return LibraryFetchFailedMsg{Tab: tab, Err: err}
 			}
 			return UsenetLoadedMsg{Usenet: usenet}
 		case TabWebDL:
-			webdl, err := m.torboxClient.GetWebDLList(ctx, true)
+			webdl, err := m.torboxClient.GetWebDLList(ctx, bypass)
 			if err != nil {
-				return StatusMsg{Text: fmt.Sprintf("Failed to load webdl: %v", err), IsErr: true}
+				return LibraryFetchFailedMsg{Tab: tab, Err: err}
 			}
 			return WebDLLoadedMsg{WebDL: webdl}
 		}
@@ -922,15 +938,20 @@ func (m AppModel) fetchTraktCatalogCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		movies, _ := m.traktClient.GetWatchedMovies(ctx)
-		shows, _ := m.traktClient.GetWatchedShows(ctx)
-		playback, _ := m.traktClient.GetPlayback(ctx)
-
-		return TraktCatalogLoadedMsg{
-			Movies:   movies,
-			Shows:    shows,
-			Playback: playback,
+		movies, err := m.traktClient.GetWatchedMovies(ctx)
+		if err != nil {
+			return TraktCatalogFailedMsg{Err: err}
 		}
+		shows, err := m.traktClient.GetWatchedShows(ctx)
+		if err != nil {
+			return TraktCatalogFailedMsg{Err: err}
+		}
+		playback, err := m.traktClient.GetPlayback(ctx)
+		if err != nil {
+			return TraktCatalogFailedMsg{Err: err}
+		}
+
+		return TraktCatalogLoadedMsg{Movies: movies, Shows: shows, Playback: playback}
 	}
 }
 
