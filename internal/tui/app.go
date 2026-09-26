@@ -36,6 +36,8 @@ type AppModel struct {
 	store          *cache.Store
 	cachedAt       [3]time.Time
 	reconciledTabs uint8
+	traktSettled   bool
+	heldLaunch     *heldLaunch
 
 	width  int
 	height int
@@ -239,10 +241,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case TraktCatalogLoadedMsg:
+		m.traktSettled = true
 		m.matcher.UpdateCatalog(msg.Movies, msg.Shows, msg.Playback)
 		m.recalculateBadges()
 		m.reapplyFilter()
-		return m, nil
+		cmd := m.releaseHeldLaunch()
+		return m, cmd
 
 	case LibraryFetchFailedMsg:
 		m.loading = false
@@ -258,7 +262,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case TraktCatalogFailedMsg:
-		return m, nil
+		m.traktSettled = true
+		cmd := m.releaseHeldLaunch()
+		return m, cmd
 
 	case DeviceCodeGeneratedMsg:
 		m.authModal.DeviceCode = msg.Code
@@ -300,6 +306,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.heldLaunch != nil && msg.String() == "esc" && m.activeModal == ModalNone && !m.searchActive {
+		m.heldLaunch = nil
+		m.statusText = "Ready"
+		return m, nil
+	}
+
 	if m.searchActive {
 		switch msg.String() {
 		case "esc":
@@ -1001,6 +1013,13 @@ func (m AppModel) streamItemCmd(item *LibraryItem, resumePercent float64) tea.Cm
 }
 
 func (m *AppModel) beginStream(title string, parsed matcher.ParsedMedia, play func(float64) tea.Cmd) tea.Cmd {
+	if m.awaitingTrakt() {
+		m.heldLaunch = &heldLaunch{title: title, parsed: parsed, play: play}
+		m.statusText = "Checking your position…"
+		m.isStatusErr = false
+		return nil
+	}
+
 	percent, pausedAt := m.resumeFor(parsed)
 	if percent <= 0 {
 		return play(0)

@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/cache"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
@@ -68,4 +69,24 @@ func (m *AppModel) showTab(tab TabType) tea.Cmd {
 		return nil
 	}
 	return m.fetchLibraryCmd(tab, false)
+}
+
+type heldLaunch struct {
+	title  string
+	parsed matcher.ParsedMedia
+	play   func(float64) tea.Cmd
+}
+
+func (m AppModel) awaitingTrakt() bool {
+	return !m.traktSettled && m.traktClient != nil && m.cfg.Trakt.HasAuth()
+}
+
+func (m *AppModel) releaseHeldLaunch() tea.Cmd {
+	h := m.heldLaunch
+	m.heldLaunch = nil
+	if h == nil {
+		return nil
+	}
+	m.statusText = "Ready"
+	return m.beginStream(h.title, h.parsed, h.play)
 }
