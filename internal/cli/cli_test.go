@@ -86,6 +86,35 @@ func TestCLI_AuthTorBox(t *testing.T) {
 	assert.Equal(t, "test-secret-key-12345", loaded.TorBox.APIKey)
 }
 
+func TestCLI_AuthTorBox_DoesNotPersistAnEnvOverriddenTraktSecret(t *testing.T) {
+	for _, name := range []string{"TORBOX_API_KEY", "TRAKT_CLIENT_ID", "TRAKT_ACCESS_TOKEN", "TRAKT_REFRESH_TOKEN"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("TRAKT_CLIENT_SECRET", "env-secret-must-not-leak-to-disk")
+
+	tmpDir, err := os.MkdirTemp("", "cli-auth-test-*")
+	require.NoError(t, err)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
+
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	_ = config.DefaultConfig().SaveToFile(cfgPath)
+
+	out, err := executeCommand("--config", cfgPath, "auth", "torbox", "test-secret-key-12345")
+	require.NoError(t, err)
+	assert.Contains(t, out, "TorBox API key saved successfully")
+
+	loaded, err := config.LoadFromFile(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, "test-secret-key-12345", loaded.TorBox.APIKey)
+
+	raw, err := os.ReadFile(cfgPath) // #nosec G304
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "env-secret-must-not-leak-to-disk", "an env-set Trakt secret must never land in a file `auth torbox` writes")
+}
+
 func TestCLI_ListAndAdd(t *testing.T) {
 	var torrentsCalled, usenetCalled, webdlCalled, addCalled bool
 

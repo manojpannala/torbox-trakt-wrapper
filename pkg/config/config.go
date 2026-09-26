@@ -198,11 +198,8 @@ func (c *Config) Save() error {
 	return c.SaveToFile(GetConfigFile())
 }
 
-// PersistTraktTokens writes only the four Trakt token fields to disk. It
-// re-reads the file fresh (skipping env overrides, so an env-set secret
-// never gets baked into it) so a concurrent editor's other fields survive,
-// and it never mutates the receiver.
-func (c *Config) PersistTraktTokens(accessToken, refreshToken string, createdAt, expiresIn int64) error {
+// persist skips env overrides so an env-set secret never reaches the file.
+func (c *Config) persist(apply func(*Config)) error {
 	path := c.path
 	if path == "" {
 		path = GetConfigFile()
@@ -213,12 +210,24 @@ func (c *Config) PersistTraktTokens(accessToken, refreshToken string, createdAt,
 		return err
 	}
 
-	fresh.Trakt.AccessToken = accessToken
-	fresh.Trakt.RefreshToken = refreshToken
-	fresh.Trakt.TokenCreatedAt = createdAt
-	fresh.Trakt.TokenExpiresIn = expiresIn
+	apply(fresh)
 
 	return fresh.SaveToFile(path)
+}
+
+func (c *Config) PersistTraktTokens(accessToken, refreshToken string, createdAt, expiresIn int64) error {
+	return c.persist(func(fresh *Config) {
+		fresh.Trakt.AccessToken = accessToken
+		fresh.Trakt.RefreshToken = refreshToken
+		fresh.Trakt.TokenCreatedAt = createdAt
+		fresh.Trakt.TokenExpiresIn = expiresIn
+	})
+}
+
+func (c *Config) PersistTorBoxKey(apiKey string) error {
+	return c.persist(func(fresh *Config) {
+		fresh.TorBox.APIKey = apiKey
+	})
 }
 
 func (c *Config) SaveToFile(path string) error {

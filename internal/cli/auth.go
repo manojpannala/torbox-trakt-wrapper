@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/cache"
-	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
 
@@ -61,12 +60,7 @@ var authTraktCmd = &cobra.Command{
 			return fmt.Errorf("device pairing failed: %w", err)
 		}
 
-		c.Trakt.AccessToken = tokens.AccessToken
-		c.Trakt.RefreshToken = tokens.RefreshToken
-		c.Trakt.TokenCreatedAt = tokens.CreatedAt
-		c.Trakt.TokenExpiresIn = tokens.ExpiresIn
-
-		if err := saveActiveConfig(c); err != nil {
+		if err := c.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn); err != nil {
 			return fmt.Errorf("failed to save tokens to config: %w", err)
 		}
 
@@ -98,8 +92,7 @@ var authTorBoxCmd = &cobra.Command{
 		}
 
 		c := GetConfig()
-		c.TorBox.APIKey = apiKey
-		if err := saveActiveConfig(c); err != nil {
+		if err := c.PersistTorBoxKey(apiKey); err != nil {
 			return fmt.Errorf("failed to save config: %w", err)
 		}
 
@@ -107,14 +100,6 @@ var authTorBoxCmd = &cobra.Command{
 		fmt.Println("✓ TorBox API key saved successfully.")
 		return nil
 	},
-}
-
-func saveActiveConfig(c *config.Config) error {
-	path := cfgFile
-	if path == "" {
-		path = config.GetConfigFile()
-	}
-	return c.SaveToFile(path)
 }
 
 func init() {
