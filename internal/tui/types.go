@@ -84,20 +84,24 @@ func formatBytes(b int64) string {
 
 type TorrentsLoadedMsg struct {
 	Torrents []torbox.Torrent
+	Gen      uint64
 }
 
 type UsenetLoadedMsg struct {
 	Usenet []torbox.UsenetItem
+	Gen    uint64
 }
 
 type WebDLLoadedMsg struct {
 	WebDL []torbox.WebDLItem
+	Gen   uint64
 }
 
 type TraktCatalogLoadedMsg struct {
 	Movies   []trakt.WatchedMovie
 	Shows    []trakt.WatchedShow
 	Playback []trakt.PlaybackItem
+	Gen      uint64
 }
 
 type PlaybackFinishedMsg struct {
@@ -134,8 +138,10 @@ type RefreshDataMsg struct{}
 type LibraryFetchFailedMsg struct {
 	Tab TabType
 	Err error
+	Gen uint64
 }
 
 type TraktCatalogFailedMsg struct {
 	Err error
+	Gen uint64
 }

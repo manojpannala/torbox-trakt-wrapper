@@ -56,9 +56,10 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 	assert.Contains(t, viewStr, "Test Movie Alpha")
 	assert.Contains(t, viewStr, "Test Series Beta")
 
-	m, _ = appModel.Update(keyPress(tea.KeyTab))
-	appModel = m.(tui.AppModel)
-
+	// Deliver each tab's load before switching to it: switching to an
+	// unreconciled tab issues its own (discarded, here) fetch with a newer
+	// generation, so a hand-built load for that tab must land first or it
+	// would be dropped as stale.
 	m, _ = appModel.Update(tui.UsenetLoadedMsg{
 		Usenet: []torbox.UsenetItem{
 			{
@@ -71,10 +72,10 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 		},
 	})
 	appModel = m.(tui.AppModel)
-	assert.Contains(t, appModel.View().Content, "Test Usenet Gamma")
 
 	m, _ = appModel.Update(keyPress(tea.KeyTab))
 	appModel = m.(tui.AppModel)
+	assert.Contains(t, appModel.View().Content, "Test Usenet Gamma")
 
 	m, _ = appModel.Update(tui.WebDLLoadedMsg{
 		WebDL: []torbox.WebDLItem{
@@ -87,6 +88,9 @@ func TestAppModel_InitAndUpdate(t *testing.T) {
 			},
 		},
 	})
+	appModel = m.(tui.AppModel)
+
+	m, _ = appModel.Update(keyPress(tea.KeyTab))
 	appModel = m.(tui.AppModel)
 	assert.Contains(t, appModel.View().Content, "Test Delta")
 

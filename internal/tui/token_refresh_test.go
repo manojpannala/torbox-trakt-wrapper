@@ -64,7 +64,7 @@ token_expires_in = 10
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		m.fetchTraktCatalogCmd()()
+		m.fetchTraktCatalogCmd(m.traktGen)()
 	}()
 
 racing:

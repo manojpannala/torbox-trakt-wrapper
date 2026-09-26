@@ -112,7 +112,10 @@ func TestSuccessfulFetch_WritesTheCache(t *testing.T) {
 	store, _ := newTestStore(t)
 	m := testModel(t, WithCache(store))
 
-	m.fetchLibraryCmd(TabTorrents, false)()
+	msg := m.fetchLibraryCmd(TabTorrents, false, m.libGen[TabTorrents])()
+	_, cmd := m.Update(msg)
+	require.NotNil(t, cmd, "an accepted load must return the cache-write command")
+	cmd()
 
 	e, ok := cache.Read[[]torbox.Torrent](store, cache.TorBoxTorrents)
 	require.True(t, ok)
@@ -128,7 +131,10 @@ func TestSuccessfulEmptyFetch_OverwritesTheCache(t *testing.T) {
 	cache.Write(store, cache.TorBoxTorrents, []torbox.Torrent{alpha})
 	m := testModel(t, WithCache(store))
 
-	m.fetchLibraryCmd(TabTorrents, false)()
+	msg := m.fetchLibraryCmd(TabTorrents, false, m.libGen[TabTorrents])()
+	_, cmd := m.Update(msg)
+	require.NotNil(t, cmd, "an accepted load must return the cache-write command")
+	cmd()
 
 	e, ok := cache.Read[[]torbox.Torrent](store, cache.TorBoxTorrents)
 	require.True(t, ok)
@@ -143,7 +149,9 @@ func TestFailedFetch_LeavesTheCacheAlone(t *testing.T) {
 	cache.Write(store, cache.TorBoxTorrents, []torbox.Torrent{alpha})
 	m := testModel(t, WithCache(store))
 
-	m.fetchLibraryCmd(TabTorrents, false)()
+	msg := m.fetchLibraryCmd(TabTorrents, false, m.libGen[TabTorrents])()
+	_, cmd := m.Update(msg)
+	assert.Nil(t, cmd, "a failed fetch must not write the cache")
 
 	e, ok := cache.Read[[]torbox.Torrent](store, cache.TorBoxTorrents)
 	require.True(t, ok)
@@ -160,7 +168,10 @@ func TestTraktFetch_WritesTheCacheOnlyOnSuccess(t *testing.T) {
 		store, _ := newTestStore(t)
 		m := testModel(t, WithCache(store))
 
-		m.fetchTraktCatalogCmd()()
+		msg := m.fetchTraktCatalogCmd(m.traktGen)()
+		_, cmd := m.Update(msg)
+		require.NotNil(t, cmd, "an accepted catalog load must return the cache-write command")
+		cmd()
 
 		e, ok := cache.Read[traktCatalog](store, cache.TraktCatalog)
 		require.True(t, ok)
@@ -178,7 +189,12 @@ func TestTraktFetch_WritesTheCacheOnlyOnSuccess(t *testing.T) {
 		})
 		m := testModel(t, WithCache(store))
 
-		m.fetchTraktCatalogCmd()()
+		msg := m.fetchTraktCatalogCmd(m.traktGen)()
+		_, cmd := m.Update(msg)
+		assert.Nil(t, cmd, "a failed fetch must not write the cache")
+		if cmd != nil {
+			cmd()
+		}
 
 		e, ok := cache.Read[traktCatalog](store, cache.TraktCatalog)
 		require.True(t, ok)
@@ -354,6 +370,65 @@ func TestRefreshKey_BypassesTorBoxsCache(t *testing.T) {
 	assert.Contains(t, torrentURLs[0], "bypass_cache=true")
 }
 
+func TestStaleTorrentsLoad_AfterRefresh_IsDropped(t *testing.T) {
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+	staleGen := m.libGen[TabTorrents]
+
+	next, _ := m.handleKeyMsg(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	got := next.(AppModel)
+	require.NotEqual(t, staleGen, got.libGen[TabTorrents], "r must bump the generation for this regression to be meaningful")
+
+	next2, cmd := got.Update(TorrentsLoadedMsg{Torrents: []torbox.Torrent{alpha}, Gen: staleGen})
+
+	assert.Nil(t, cmd, "a stale load must not write the cache")
+	assert.Empty(t, next2.(AppModel).torrents, "a stale load must not replace newer data")
+	_, ok := cache.Read[[]torbox.Torrent](store, cache.TorBoxTorrents)
+	assert.False(t, ok, "a stale load must leave the cache file untouched")
+}
+
+func TestStaleTraktCatalog_AfterRePairing_IsDropped(t *testing.T) {
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+	preGen := m.traktGen
+
+	next, _ := m.Update(TokenPollSuccessMsg{Token: &trakt.TokenResponse{AccessToken: "new-account"}})
+	got := next.(AppModel)
+	require.NotEqual(t, preGen, got.traktGen, "re-pairing must bump the Trakt generation for this regression to be meaningful")
+
+	next2, cmd := got.Update(TraktCatalogLoadedMsg{
+		Movies: []trakt.WatchedMovie{{Plays: 1, Movie: trakt.Movie{Title: "Test Feature Alpha", Year: 2023}}},
+		Gen:    preGen,
+	})
+
+	final := next2.(AppModel)
+	assert.False(t, final.traktSettled, "a pre-pairing catalog must not settle the new account's wait")
+	assert.Nil(t, cmd)
+	_, ok := cache.Read[traktCatalog](store, cache.TraktCatalog)
+	assert.False(t, ok, "the stale catalog must not be written under the new account")
+}
+
+func TestStaleLibraryFetchFailed_DoesNotClearANewerInFlightBit(t *testing.T) {
+	m := testModel(t)
+	staleGen := m.libGen[TabTorrents]
+
+	next, _ := m.handleKeyMsg(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	got := next.(AppModel)
+	require.NotZero(t, got.inFlight&tabBit(TabTorrents), "r must mark the tab in flight for this regression to be meaningful")
+
+	next2, _ := got.Update(LibraryFetchFailedMsg{Tab: TabTorrents, Err: errors.New("stale"), Gen: staleGen})
+
+	assert.NotZero(t, next2.(AppModel).inFlight&tabBit(TabTorrents), "a stale failure must not clear the current fetch's in-flight bit")
+}
+
+func TestRefreshKey_WithNilTorBoxClient_DoesNotSetInFlight(t *testing.T) {
+	m := testModelWith(t, func(c *config.Config) { c.TorBox.APIKey = "" })
+
+	next, _ := m.handleKeyMsg(tea.KeyPressMsg{Code: 'r', Text: "r"})
+
+	assert.Zero(t, next.(AppModel).inFlight, "no TorBox client means nothing to mark in flight")
+}
+
 func TestStalenessHint(t *testing.T) {
 	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
 
@@ -478,7 +553,7 @@ func TestRefresh_ClearsItsOwnStatusWhenFreshDataLands(t *testing.T) {
 	next, _ := m.handleKeyMsg(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	require.Equal(t, "Refreshing library...", next.(AppModel).statusText)
 
-	next, _ = next.(AppModel).Update(TorrentsLoadedMsg{Torrents: []torbox.Torrent{alpha}})
+	next, _ = next.(AppModel).Update(TorrentsLoadedMsg{Torrents: []torbox.Torrent{alpha}, Gen: next.(AppModel).libGen[TabTorrents]})
 
 	assert.Equal(t, "Ready", next.(AppModel).statusText)
 }

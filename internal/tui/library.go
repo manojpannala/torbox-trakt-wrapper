@@ -45,7 +45,19 @@ func (m *AppModel) seedFromCache() {
 }
 
 func (m AppModel) launchCmds() []tea.Cmd {
-	return []tea.Cmd{m.fetchLibraryCmd(m.activeTab, false), m.fetchTraktCatalogCmd()}
+	return []tea.Cmd{
+		m.fetchLibraryCmd(m.activeTab, false, m.libGen[m.activeTab]),
+		m.fetchTraktCatalogCmd(m.traktGen),
+	}
+}
+
+// writeCacheCmd defers a cache write off the update loop. cache.Write is
+// nil-safe on a nil store, so this can be returned unconditionally.
+func writeCacheCmd[T any](store *cache.Store, key cache.Key, v T) tea.Cmd {
+	return func() tea.Msg {
+		cache.Write(store, key, v)
+		return nil
+	}
 }
 
 func tabBit(t TabType) uint8 {
@@ -96,8 +108,25 @@ func (m *AppModel) showTab(tab TabType) tea.Cmd {
 	if cachedAt.IsZero() {
 		m.loading = true
 	}
-	m.inFlight |= tabBit(tab)
-	return m.fetchLibraryCmd(tab, false)
+	return m.refetchLibrary(tab, false)
+}
+
+// refetchLibrary is the single place that issues a library fetch: it bumps
+// the tab's generation so a result from an earlier fetch is dropped on
+// arrival, and marks the tab in flight only when there is a client to answer.
+func (m *AppModel) refetchLibrary(tab TabType, bypass bool) tea.Cmd {
+	m.libGen[tab]++
+	if m.torboxClient != nil {
+		m.inFlight |= tabBit(tab)
+	}
+	return m.fetchLibraryCmd(tab, bypass, m.libGen[tab])
+}
+
+// refetchTrakt bumps the Trakt catalog generation so a result fetched for a
+// previous account (or before a re-pair) is dropped on arrival.
+func (m *AppModel) refetchTrakt() tea.Cmd {
+	m.traktGen++
+	return m.fetchTraktCatalogCmd(m.traktGen)
 }
 
 type heldLaunch struct {

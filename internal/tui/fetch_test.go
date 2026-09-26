@@ -83,7 +83,7 @@ func TestFetchTraktCatalog_ReportsFailureRatherThanAnEmptyCatalog(t *testing.T) 
 	})
 	m := testModel(t)
 
-	msg := m.fetchTraktCatalogCmd()()
+	msg := m.fetchTraktCatalogCmd(m.traktGen)()
 
 	_, failed := msg.(TraktCatalogFailedMsg)
 	assert.True(t, failed, "an empty-looking catalog would overwrite real cached data; got %T", msg)
@@ -97,7 +97,7 @@ func TestFetchTraktCatalog_ReturnsTheCatalogOnSuccess(t *testing.T) {
 	})
 	m := testModel(t)
 
-	msg := m.fetchTraktCatalogCmd()()
+	msg := m.fetchTraktCatalogCmd(m.traktGen)()
 
 	loaded, ok := msg.(TraktCatalogLoadedMsg)
 	require.True(t, ok, "got %T", msg)
@@ -110,7 +110,7 @@ func TestFetchLibrary_ReportsTheTabThatFailed(t *testing.T) {
 	})
 	m := testModel(t)
 
-	msg := m.fetchLibraryCmd(TabUsenet, false)()
+	msg := m.fetchLibraryCmd(TabUsenet, false, m.libGen[TabUsenet])()
 
 	failed, ok := msg.(LibraryFetchFailedMsg)
 	require.True(t, ok, "got %T", msg)
@@ -124,8 +124,8 @@ func TestFetchLibrary_PassesTheBypassFlagThrough(t *testing.T) {
 	})
 	m := testModel(t)
 
-	m.fetchLibraryCmd(TabTorrents, false)()
-	m.fetchLibraryCmd(TabTorrents, true)()
+	m.fetchLibraryCmd(TabTorrents, false, m.libGen[TabTorrents])()
+	m.fetchLibraryCmd(TabTorrents, true, m.libGen[TabTorrents])()
 
 	urls := rec.all()
 	require.Len(t, urls, 2)

@@ -38,6 +38,8 @@ type AppModel struct {
 	fetchFailed    uint8
 	inFlight       uint8
 	reconciledTabs uint8
+	libGen         [3]uint64
+	traktGen       uint64
 	traktSettled   bool
 	traktFailed    bool
 	heldLaunch     *heldLaunch
@@ -223,39 +225,56 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusText = msg.Text
 		m.isStatusErr = msg.IsErr
 		m.loading = false
-		return m, m.fetchTraktCatalogCmd()
+		cmd := m.refetchTrakt()
+		return m, cmd
 
 	case TorrentsLoadedMsg:
+		if msg.Gen != m.libGen[TabTorrents] {
+			return m, nil
+		}
 		m.loading = false
 		m.markFresh(TabTorrents)
 		m.torrents = m.convertTorrents(msg.Torrents)
 		m.reapplyFilter()
-		return m, nil
+		return m, writeCacheCmd(m.store, cache.TorBoxTorrents, msg.Torrents)
 
 	case UsenetLoadedMsg:
+		if msg.Gen != m.libGen[TabUsenet] {
+			return m, nil
+		}
 		m.loading = false
 		m.markFresh(TabUsenet)
 		m.usenet = m.convertUsenet(msg.Usenet)
 		m.reapplyFilter()
-		return m, nil
+		return m, writeCacheCmd(m.store, cache.TorBoxUsenet, msg.Usenet)
 
 	case WebDLLoadedMsg:
+		if msg.Gen != m.libGen[TabWebDL] {
+			return m, nil
+		}
 		m.loading = false
 		m.markFresh(TabWebDL)
 		m.webdl = m.convertWebDL(msg.WebDL)
 		m.reapplyFilter()
-		return m, nil
+		return m, writeCacheCmd(m.store, cache.TorBoxWebDL, msg.WebDL)
 
 	case TraktCatalogLoadedMsg:
+		if msg.Gen != m.traktGen {
+			return m, nil
+		}
 		m.traktSettled = true
 		m.traktFailed = false
 		m.matcher.UpdateCatalog(msg.Movies, msg.Shows, msg.Playback)
 		m.recalculateBadges()
 		m.reapplyFilter()
-		cmd := m.releaseHeldLaunch()
-		return m, cmd
+		cacheCmd := writeCacheCmd(m.store, cache.TraktCatalog, traktCatalog{Movies: msg.Movies, Shows: msg.Shows, Playback: msg.Playback})
+		releaseCmd := m.releaseHeldLaunch()
+		return m, tea.Batch(cacheCmd, releaseCmd)
 
 	case LibraryFetchFailedMsg:
+		if msg.Gen != m.libGen[msg.Tab] {
+			return m, nil
+		}
 		m.loading = false
 		m.inFlight &^= tabBit(msg.Tab)
 		if !m.cachedAt[msg.Tab].IsZero() {
@@ -278,6 +297,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case TraktCatalogFailedMsg:
+		if msg.Gen != m.traktGen {
+			return m, nil
+		}
 		m.traktSettled = true
 		m.traktFailed = true
 		cmd := m.releaseHeldLaunch()
@@ -307,7 +329,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.recalculateBadges()
 		m.reapplyFilter()
 		m.traktSettled = false
-		cmds = append(cmds, m.fetchTraktCatalogCmd())
+		cmds = append(cmds, m.refetchTrakt())
 		return m, tea.Batch(cmds...)
 
 	case TokenPollErrorMsg:
@@ -523,8 +545,9 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.loading = true
 		m.statusText = refreshingStatus
-		m.inFlight |= tabBit(m.activeTab)
-		return m, tea.Batch(m.fetchLibraryCmd(m.activeTab, true), m.fetchTraktCatalogCmd())
+		libCmd := m.refetchLibrary(m.activeTab, true)
+		traktCmd := m.refetchTrakt()
+		return m, tea.Batch(libCmd, traktCmd)
 
 	case "a":
 		m.addModal = NewAddModal()
@@ -966,7 +989,7 @@ func (m AppModel) renderFooter() string {
 	)
 }
 
-func (m AppModel) fetchLibraryCmd(tab TabType, bypass bool) tea.Cmd {
+func (m AppModel) fetchLibraryCmd(tab TabType, bypass bool, gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		if m.torboxClient == nil {
 			return StatusMsg{Text: "TorBox API key not configured", IsErr: true}
@@ -978,30 +1001,27 @@ func (m AppModel) fetchLibraryCmd(tab TabType, bypass bool) tea.Cmd {
 		case TabTorrents:
 			torrents, err := m.torboxClient.GetTorrents(ctx, bypass)
 			if err != nil {
-				return LibraryFetchFailedMsg{Tab: tab, Err: err}
+				return LibraryFetchFailedMsg{Tab: tab, Err: err, Gen: gen}
 			}
-			cache.Write(m.store, cache.TorBoxTorrents, torrents)
-			return TorrentsLoadedMsg{Torrents: torrents}
+			return TorrentsLoadedMsg{Torrents: torrents, Gen: gen}
 		case TabUsenet:
 			usenet, err := m.torboxClient.GetUsenetList(ctx, bypass)
 			if err != nil {
-				return LibraryFetchFailedMsg{Tab: tab, Err: err}
+				return LibraryFetchFailedMsg{Tab: tab, Err: err, Gen: gen}
 			}
-			cache.Write(m.store, cache.TorBoxUsenet, usenet)
-			return UsenetLoadedMsg{Usenet: usenet}
+			return UsenetLoadedMsg{Usenet: usenet, Gen: gen}
 		case TabWebDL:
 			webdl, err := m.torboxClient.GetWebDLList(ctx, bypass)
 			if err != nil {
-				return LibraryFetchFailedMsg{Tab: tab, Err: err}
+				return LibraryFetchFailedMsg{Tab: tab, Err: err, Gen: gen}
 			}
-			cache.Write(m.store, cache.TorBoxWebDL, webdl)
-			return WebDLLoadedMsg{WebDL: webdl}
+			return WebDLLoadedMsg{WebDL: webdl, Gen: gen}
 		}
 		return nil
 	}
 }
 
-func (m AppModel) fetchTraktCatalogCmd() tea.Cmd {
+func (m AppModel) fetchTraktCatalogCmd(gen uint64) tea.Cmd {
 	return func() tea.Msg {
 		if m.traktClient == nil || !m.cfg.Trakt.HasAuth() {
 			return nil
@@ -1011,19 +1031,18 @@ func (m AppModel) fetchTraktCatalogCmd() tea.Cmd {
 
 		movies, err := m.traktClient.GetWatchedMovies(ctx)
 		if err != nil {
-			return TraktCatalogFailedMsg{Err: err}
+			return TraktCatalogFailedMsg{Err: err, Gen: gen}
 		}
 		shows, err := m.traktClient.GetWatchedShows(ctx)
 		if err != nil {
-			return TraktCatalogFailedMsg{Err: err}
+			return TraktCatalogFailedMsg{Err: err, Gen: gen}
 		}
 		playback, err := m.traktClient.GetPlayback(ctx)
 		if err != nil {
-			return TraktCatalogFailedMsg{Err: err}
+			return TraktCatalogFailedMsg{Err: err, Gen: gen}
 		}
 
-		cache.Write(m.store, cache.TraktCatalog, traktCatalog{Movies: movies, Shows: shows, Playback: playback})
-		return TraktCatalogLoadedMsg{Movies: movies, Shows: shows, Playback: playback}
+		return TraktCatalogLoadedMsg{Movies: movies, Shows: shows, Playback: playback, Gen: gen}
 	}
 }
 

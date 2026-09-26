@@ -108,7 +108,8 @@ func TestDeferral_EscapeCancelsTheHeldLaunch(t *testing.T) {
 	assert.NotContains(t, viewText(m), "Checking your position")
 
 	m, cmd := sendMsg(m, freshCatalog(70))
-	assert.Nil(t, cmd)
+	require.NotNil(t, cmd, "an accepted catalog load must still return its cache-write command")
+	assert.Nil(t, cmd(), "cancelling must not resolve a link; the only pending command left is the cache write")
 	assert.NotContains(t, viewText(m), "Resume Playback")
 }
 
