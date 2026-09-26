@@ -11,6 +11,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/spf13/cobra"
 
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/cache"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
@@ -69,6 +70,7 @@ var authTraktCmd = &cobra.Command{
 			return fmt.Errorf("failed to save tokens to config: %w", err)
 		}
 
+		forget(cache.TraktCatalog)
 		fmt.Println("✓ Successfully authenticated with Trakt.tv!")
 		return nil
 	},
@@ -101,6 +103,7 @@ var authTorBoxCmd = &cobra.Command{
 			return fmt.Errorf("failed to save config: %w", err)
 		}
 
+		forget(cache.TorBoxTorrents, cache.TorBoxUsenet, cache.TorBoxWebDL)
 		fmt.Println("✓ TorBox API key saved successfully.")
 		return nil
 	},

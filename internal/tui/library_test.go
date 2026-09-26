@@ -394,3 +394,67 @@ func TestFreshData_LeavesOtherStatusMessagesAlone(t *testing.T) {
 
 	assert.Equal(t, "Playback finished", next.(AppModel).statusText)
 }
+
+func TestPairing_ClearsTheTraktCacheAndTheInMemoryCatalog(t *testing.T) {
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxTorrents, []torbox.Torrent{alpha})
+	cache.Write(store, cache.TraktCatalog, traktCatalog{
+		Playback: []trakt.PlaybackItem{playbackFor("Test Feature Alpha", 2023, 40)},
+	})
+	m := testModel(t, WithCache(store))
+	next, _ := m.Update(TraktCatalogLoadedMsg{Playback: []trakt.PlaybackItem{playbackFor("Test Feature Alpha", 2023, 40)}})
+	require.True(t, next.(AppModel).traktSettled)
+
+	next, _ = next.(AppModel).Update(TokenPollSuccessMsg{Token: &trakt.TokenResponse{AccessToken: "new-account"}})
+	got := next.(AppModel)
+
+	_, ok := cache.Read[traktCatalog](store, cache.TraktCatalog)
+	assert.False(t, ok, "the previous account's history must not survive a re-pair")
+	_, ok = cache.Read[[]torbox.Torrent](store, cache.TorBoxTorrents)
+	assert.True(t, ok, "pairing Trakt says nothing about the TorBox account")
+	percent, _ := got.resumeFor(matcher.ParseMedia(alpha.Name))
+	assert.Zero(t, percent, "the old account's positions must leave memory too")
+	assert.False(t, got.traktSettled, "a launch right after pairing must wait for the new account")
+}
+
+func TestTraktRefresh_ClearsNothing(t *testing.T) {
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TraktCatalog, traktCatalog{
+		Playback: []trakt.PlaybackItem{playbackFor("Test Feature Alpha", 2023, 40)},
+	})
+	m := testModel(t, WithCache(store))
+
+	_, _ = m.Update(TraktCatalogLoadedMsg{})
+
+	_, ok := cache.Read[traktCatalog](store, cache.TraktCatalog)
+	assert.True(t, ok)
+}
+
+func TestPairing_ClearsStaleBadgesOnEveryTab(t *testing.T) {
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxUsenet, []torbox.UsenetItem{
+		{ID: 1, Name: "Test.Feature.Alpha.2023.1080p.mkv", DownloadState: "completed", Progress: 1},
+	})
+	cache.Write(store, cache.TorBoxWebDL, []torbox.WebDLItem{
+		{ID: 1, Name: "Test.Feature.Alpha.2023.1080p.mkv", DownloadState: "completed", Progress: 1},
+	})
+	cache.Write(store, cache.TraktCatalog, traktCatalog{
+		Playback: []trakt.PlaybackItem{playbackFor("Test Feature Alpha", 2023, 40)},
+	})
+	m := testModel(t, WithCache(store))
+
+	require.NotEmpty(t, m.usenet[0].TraktBadge, "the test setup must actually produce a badge to clear")
+	require.NotEmpty(t, m.webdl[0].TraktBadge, "the test setup must actually produce a badge to clear")
+
+	next, _ := m.Update(TokenPollSuccessMsg{Token: &trakt.TokenResponse{AccessToken: "new-account"}})
+	got := next.(AppModel)
+
+	for _, item := range got.usenet {
+		assert.Zero(t, item.TraktProgress, "usenet badges must not survive a re-pair")
+		assert.Empty(t, item.TraktBadge, "usenet badges must not survive a re-pair")
+	}
+	for _, item := range got.webdl {
+		assert.Zero(t, item.TraktProgress, "web-DL badges must not survive a re-pair")
+		assert.Empty(t, item.TraktBadge, "web-DL badges must not survive a re-pair")
+	}
+}

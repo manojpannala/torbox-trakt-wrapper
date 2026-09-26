@@ -292,6 +292,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resumePrompt = nil
 		m.statusText = "Successfully paired with Trakt.tv!"
 		m.isStatusErr = false
+		m.store.Invalidate(cache.TraktCatalog)
+		m.matcher.UpdateCatalog(nil, nil, nil)
+		m.recalculateBadges()
+		m.reapplyFilter()
+		m.traktSettled = false
 		cmds = append(cmds, m.fetchTraktCatalogCmd())
 		return m, tea.Batch(cmds...)
 
@@ -718,6 +723,20 @@ func (m *AppModel) recalculateBadges() {
 			t.WatchStatus = res.Status
 			t.TraktProgress = res.ProgressPercent
 		}
+	}
+	for i := range m.usenet {
+		u := &m.usenet[i]
+		res := m.matcher.MatchParsed(u.Parsed)
+		u.TraktBadge = res.Badge
+		u.TraktProgress = res.ProgressPercent
+		u.WatchStatus = res.Status
+	}
+	for i := range m.webdl {
+		w := &m.webdl[i]
+		res := m.matcher.MatchParsed(w.Parsed)
+		w.TraktBadge = res.Badge
+		w.TraktProgress = res.ProgressPercent
+		w.WatchStatus = res.Status
 	}
 }
 

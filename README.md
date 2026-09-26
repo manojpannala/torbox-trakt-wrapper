@@ -117,6 +117,9 @@ tt-wrapper stream 102
 tt-wrapper config
 tt-wrapper config path
 tt-wrapper config init
+
+# Delete cached listings and watch history
+tt-wrapper cache clear
 ```
 
 ### Global flags
@@ -142,6 +145,18 @@ API keys and tokens are never written. Request bodies and headers are never
 logged, credential query parameters are blanked to `REDACTED` (TorBox's
 download-link endpoints carry the key as `token=`), and the signed stream URL is
 reduced to its host. Attach it to a bug report as-is.
+
+### Cache
+
+Your TorBox listings and Trakt watch history are kept in
+`$XDG_CACHE_HOME/torbox-trakt-wrapper/` (`~/.cache/...` by default), so the
+library appears the moment the app opens and then refreshes in the background.
+
+- Files are `0600` and never contain API keys, tokens or stream links.
+- `torbox.cache_ttl_minutes` sets how old a tab you switch to may be before it
+  is refreshed. The tab you open into is always refreshed.
+- Pairing a different TorBox or Trakt account clears that account's cached data.
+- `tt-wrapper cache clear` deletes everything.
 
 ---
 

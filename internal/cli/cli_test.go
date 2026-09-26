@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/internal/cli"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/cache"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 )
 
@@ -65,6 +67,8 @@ func TestCLI_Config(t *testing.T) {
 }
 
 func TestCLI_AuthTorBox(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
 	tmpDir, err := os.MkdirTemp("", "cli-auth-test-*")
 	require.NoError(t, err)
 	defer func() {
@@ -245,4 +249,50 @@ func TestCLI_MalformedConfigFailsWithoutOverwriting(t *testing.T) {
 	after, readErr := os.ReadFile(cfgPath) // #nosec G304
 	require.NoError(t, readErr)
 	assert.Equal(t, broken, string(after), "the malformed config must be left untouched")
+}
+
+var allCacheKeys = []cache.Key{cache.TorBoxTorrents, cache.TorBoxUsenet, cache.TorBoxWebDL, cache.TraktCatalog}
+
+func seedCache(t *testing.T) *cache.Store {
+	t.Helper()
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	store := cache.New(config.GetCacheDir(), time.Hour, config.Version, nil)
+	for _, k := range allCacheKeys {
+		cache.Write(store, k, []string{"x"})
+	}
+	return store
+}
+
+func freshConfig(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	require.NoError(t, config.DefaultConfig().SaveToFile(path))
+	return path
+}
+
+func TestCLI_CacheClearRemovesEverything(t *testing.T) {
+	store := seedCache(t)
+
+	out, err := executeCommand("--config", freshConfig(t), "cache", "clear")
+
+	require.NoError(t, err)
+	assert.Contains(t, out, "Cache cleared")
+	for _, k := range allCacheKeys {
+		_, ok := cache.Read[[]string](store, k)
+		assert.False(t, ok, "%s survived cache clear", k)
+	}
+}
+
+func TestCLI_AuthTorBoxClearsOnlyTheTorBoxCache(t *testing.T) {
+	store := seedCache(t)
+
+	_, err := executeCommand("--config", freshConfig(t), "auth", "torbox", "a-different-account-key")
+
+	require.NoError(t, err)
+	for _, k := range []cache.Key{cache.TorBoxTorrents, cache.TorBoxUsenet, cache.TorBoxWebDL} {
+		_, ok := cache.Read[[]string](store, k)
+		assert.False(t, ok, "%s belongs to the replaced account", k)
+	}
+	_, ok := cache.Read[[]string](store, cache.TraktCatalog)
+	assert.True(t, ok, "a new TorBox key says nothing about the Trakt account")
 }
