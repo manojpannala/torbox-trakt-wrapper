@@ -161,3 +161,90 @@ func TestDefaultConfig_PlayerArgsHaveNoUnexpandedPlaceholders(t *testing.T) {
 		assert.NotContains(t, arg, "${", "nothing expands placeholders in player args: %s", arg)
 	}
 }
+
+func TestPersistTraktTokens_KeepsConcurrentDiskEditsToOtherKeys(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	initial := DefaultConfig()
+	initial.TorBox.APIKey = "original-key"
+	require.NoError(t, initial.SaveToFile(configPath))
+
+	a, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+
+	rewritten := DefaultConfig()
+	rewritten.TorBox.APIKey = "rewritten-by-someone-else"
+	require.NoError(t, rewritten.SaveToFile(configPath))
+
+	require.NoError(t, a.PersistTraktTokens("new-access", "new-refresh", 1000, 7200))
+
+	onDisk, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "rewritten-by-someone-else", onDisk.TorBox.APIKey)
+	assert.Equal(t, "new-access", onDisk.Trakt.AccessToken)
+	assert.Equal(t, "new-refresh", onDisk.Trakt.RefreshToken)
+	assert.EqualValues(t, 1000, onDisk.Trakt.TokenCreatedAt)
+	assert.EqualValues(t, 7200, onDisk.Trakt.TokenExpiresIn)
+}
+
+func TestPersistTraktTokens_DoesNotWriteEnvOverridesToDisk(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	initial := DefaultConfig()
+	initial.TorBox.APIKey = "file-key"
+	require.NoError(t, initial.SaveToFile(configPath))
+
+	t.Setenv("TORBOX_API_KEY", "env-key-must-not-leak-to-disk")
+
+	cfg, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	require.Equal(t, "env-key-must-not-leak-to-disk", cfg.TorBox.APIKey, "env override applies in memory")
+
+	require.NoError(t, cfg.PersistTraktTokens("new-access", "new-refresh", 1000, 7200))
+
+	// loadRaw skips env overrides, so this reflects exactly what's on disk.
+	onDisk, err := loadRaw(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "file-key", onDisk.TorBox.APIKey)
+
+	raw, err := os.ReadFile(configPath) // #nosec G304
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "env-key-must-not-leak-to-disk")
+}
+
+func TestPersistTraktTokens_NeverMutatesTheReceiver(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	cfg := DefaultConfig()
+	cfg.TorBox.APIKey = "receiver-key"
+	require.NoError(t, cfg.SaveToFile(configPath))
+
+	before := *cfg
+	require.NoError(t, cfg.PersistTraktTokens("new-access", "new-refresh", 1000, 7200))
+
+	assert.Equal(t, before.Trakt, cfg.Trakt, "PersistTraktTokens must not mutate the receiver's fields")
+	assert.Equal(t, before.TorBox, cfg.TorBox)
+}
+
+func TestPersistTraktTokens_FileModeAndNoLeftoverTempFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	cfg := DefaultConfig()
+	require.NoError(t, cfg.SaveToFile(configPath))
+
+	require.NoError(t, cfg.PersistTraktTokens("new-access", "new-refresh", 1000, 7200))
+
+	info, err := os.Stat(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.NotContains(t, e.Name(), ".tmp", "no leftover temp file after PersistTraktTokens")
+	}
+}

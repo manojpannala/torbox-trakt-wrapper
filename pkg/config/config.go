@@ -144,13 +144,23 @@ func Load() (*Config, error) {
 }
 
 func LoadFromFile(path string) (*Config, error) {
+	cfg, err := loadRaw(path)
+	if err != nil {
+		return nil, err
+	}
+	cfg.applyEnvOverrides()
+	return cfg, nil
+}
+
+// loadRaw parses the TOML at path without env overrides, so callers that
+// persist back to disk never bake a process-local env var into the file.
+func loadRaw(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	cfg.path = path
 
 	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		if os.IsNotExist(err) {
-			cfg.applyEnvOverrides()
 			return cfg, nil
 		}
 		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)
@@ -160,7 +170,6 @@ func LoadFromFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config TOML at %s: %w", path, err)
 	}
 
-	cfg.applyEnvOverrides()
 	return cfg, nil
 }
 
@@ -189,6 +198,29 @@ func (c *Config) Save() error {
 	return c.SaveToFile(GetConfigFile())
 }
 
+// PersistTraktTokens writes only the four Trakt token fields to disk. It
+// re-reads the file fresh (skipping env overrides, so an env-set secret
+// never gets baked into it) so a concurrent editor's other fields survive,
+// and it never mutates the receiver.
+func (c *Config) PersistTraktTokens(accessToken, refreshToken string, createdAt, expiresIn int64) error {
+	path := c.path
+	if path == "" {
+		path = GetConfigFile()
+	}
+
+	fresh, err := loadRaw(path)
+	if err != nil {
+		return err
+	}
+
+	fresh.Trakt.AccessToken = accessToken
+	fresh.Trakt.RefreshToken = refreshToken
+	fresh.Trakt.TokenCreatedAt = createdAt
+	fresh.Trakt.TokenExpiresIn = expiresIn
+
+	return fresh.SaveToFile(path)
+}
+
 func (c *Config) SaveToFile(path string) error {
 	dir := filepath.Dir(path)
 	if err := EnsureSecureDir(dir); err != nil {
@@ -200,18 +232,37 @@ func (c *Config) SaveToFile(path string) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	tmpFile := path + ".tmp"
-	if err := os.WriteFile(tmpFile, data, FilePermission); err != nil {
+	// A unique temp name per writer: a fixed one lets two processes clobber
+	// each other and rename a torn file into place.
+	tmp, err := os.CreateTemp(dir, "config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp config file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("failed to write temp config file: %w", err)
 	}
-
-	if err := os.Rename(tmpFile, path); err != nil {
-		_ = os.Remove(tmpFile)
-		return fmt.Errorf("failed to atomically replace config file: %w", err)
+	if err := tmp.Chmod(FilePermission); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("failed to set temp config file permissions: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("failed to sync temp config file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("failed to close temp config file: %w", err)
 	}
 
-	if err := os.Chmod(path, FilePermission); err != nil {
-		return err
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("failed to atomically replace config file: %w", err)
 	}
 
 	c.path = path

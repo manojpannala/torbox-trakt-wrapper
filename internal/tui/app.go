@@ -122,11 +122,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 			}),
 			trakt.WithLogger(logger),
 			trakt.WithOnTokenRefreshed(func(tokens trakt.TokenResponse) {
-				cfg.Trakt.AccessToken = tokens.AccessToken
-				cfg.Trakt.RefreshToken = tokens.RefreshToken
-				cfg.Trakt.TokenCreatedAt = tokens.CreatedAt
-				cfg.Trakt.TokenExpiresIn = tokens.ExpiresIn
-				_ = cfg.Save()
+				_ = cfg.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn)
 			}),
 		)
 	}
@@ -301,7 +297,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.Trakt.RefreshToken = msg.Token.RefreshToken
 		m.cfg.Trakt.TokenCreatedAt = msg.Token.CreatedAt
 		m.cfg.Trakt.TokenExpiresIn = msg.Token.ExpiresIn
-		_ = m.cfg.Save()
+		_ = m.cfg.PersistTraktTokens(msg.Token.AccessToken, msg.Token.RefreshToken, msg.Token.CreatedAt, msg.Token.ExpiresIn)
 		m.activeModal = ModalNone
 		m.resumePrompt = nil
 		m.statusText = "Successfully paired with Trakt.tv!"

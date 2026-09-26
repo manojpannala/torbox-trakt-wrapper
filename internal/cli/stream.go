@@ -41,11 +41,7 @@ var streamCmd = &cobra.Command{
 				}),
 				trakt.WithLogger(logger),
 				trakt.WithOnTokenRefreshed(func(tokens trakt.TokenResponse) {
-					c.Trakt.AccessToken = tokens.AccessToken
-					c.Trakt.RefreshToken = tokens.RefreshToken
-					c.Trakt.TokenCreatedAt = tokens.CreatedAt
-					c.Trakt.TokenExpiresIn = tokens.ExpiresIn
-					_ = c.Save()
+					_ = c.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn)
 				}),
 			)
 		}
