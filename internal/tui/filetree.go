@@ -30,7 +30,6 @@ type FileTreeModel struct {
 	Width      int
 }
 
-// parseFile falls back to ParseMedia when matcherEngine is nil.
 func parseFile(matcherEngine *matcher.Matcher, name string) matcher.ParsedMedia {
 	if matcherEngine != nil {
 		return matcherEngine.Parse(name)

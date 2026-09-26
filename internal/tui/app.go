@@ -196,11 +196,7 @@ func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(append([]tea.Cmd{m.spinner.Tick}, m.launchCmds()...)...)
 }
 
-// Update runs the message through update, then releases a launch that was
-// held behind a dialog as soon as that dialog closes, however it closed (key,
-// Esc, submit, or a message such as an add-success). It must not release
-// while Trakt is still unsettled — that's the normal hold, resolved by the
-// TraktCatalogLoadedMsg/TraktCatalogFailedMsg handlers in update.
+// Update releases a launch held behind a dialog once that dialog closes.
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := m.update(msg)
 	m = next.(AppModel)
@@ -1038,8 +1034,9 @@ func (m AppModel) fetchLibraryCmd(tab TabType, bypass bool, gen uint64) tea.Cmd 
 }
 
 func (m AppModel) fetchTraktCatalogCmd(gen uint64) tea.Cmd {
+	ready := m.traktClient != nil && m.cfg.Trakt.HasAuth()
 	return func() tea.Msg {
-		if m.traktClient == nil || !m.cfg.Trakt.HasAuth() {
+		if !ready {
 			return nil
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

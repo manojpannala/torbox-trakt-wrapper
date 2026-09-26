@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
 
 // TestTokenRefresh_DuringCatalogFetch_DoesNotRaceOnConfigFields builds a model
@@ -24,6 +25,10 @@ import (
 // model also reads from on every render, which -race catches as soon as
 // another goroutine reads a Trakt field concurrently.
 func TestTokenRefresh_DuringCatalogFetch_DoesNotRaceOnConfigFields(t *testing.T) {
+	for _, name := range []string{"TORBOX_API_KEY", "TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET", "TRAKT_ACCESS_TOKEN", "TRAKT_REFRESH_TOKEN"} {
+		t.Setenv(name, "")
+	}
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -81,4 +86,30 @@ racing:
 	require.NoError(t, err)
 	assert.Equal(t, "refreshed-access", reloaded.Trakt.AccessToken)
 	assert.Equal(t, "refreshed-refresh", reloaded.Trakt.RefreshToken)
+}
+
+func TestRefetchTrakt_ConcurrentWithTokenPollSuccess_DoesNotRaceOnCfg(t *testing.T) {
+	for _, name := range []string{"TORBOX_API_KEY", "TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET", "TRAKT_ACCESS_TOKEN", "TRAKT_REFRESH_TOKEN"} {
+		t.Setenv(name, "")
+	}
+
+	traktOK(t)
+	m := testModel(t)
+
+	cmd := m.refetchTrakt()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		cmd()
+	}()
+
+	_, _ = m.Update(TokenPollSuccessMsg{Token: &trakt.TokenResponse{
+		AccessToken:  "polled-access",
+		RefreshToken: "polled-refresh",
+		CreatedAt:    time.Now().Unix(),
+		ExpiresIn:    7776000,
+	}})
+
+	<-done
 }
