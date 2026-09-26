@@ -177,10 +177,7 @@ func (ft *FileTreeModel) Render(theme Theme, width, height int) string {
 		visibleLines = 10
 	}
 
-	endIdx := ft.TopIndex + visibleLines
-	if endIdx > len(ft.Items) {
-		endIdx = len(ft.Items)
-	}
+	endIdx := min(ft.TopIndex+visibleLines, len(ft.Items))
 
 	for i := ft.TopIndex; i < endIdx; i++ {
 		item := ft.Items[i]

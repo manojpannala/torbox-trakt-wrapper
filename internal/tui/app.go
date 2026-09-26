@@ -865,10 +865,7 @@ func (m AppModel) renderHeader() string {
 	headerLeft := title
 	headerRight := fmt.Sprintf("%s%s", spinnerView, authBadge)
 
-	gap := m.width - lipgloss.Width(headerLeft) - lipgloss.Width(headerRight) - 2
-	if gap < 0 {
-		gap = 0
-	}
+	gap := max(m.width-lipgloss.Width(headerLeft)-lipgloss.Width(headerRight)-2, 0)
 
 	return m.theme.Header.Width(m.width).Render(
 		lipgloss.JoinHorizontal(lipgloss.Left, headerLeft, strings.Repeat(" ", gap), headerRight),
@@ -915,10 +912,7 @@ func (m AppModel) renderLibraryList() string {
 		visibleLines = 10
 	}
 
-	endIdx := m.topIndex + visibleLines
-	if endIdx > len(items) {
-		endIdx = len(items)
-	}
+	endIdx := min(m.topIndex+visibleLines, len(items))
 
 	var sb strings.Builder
 	for i := m.topIndex; i < endIdx; i++ {
@@ -991,10 +985,7 @@ func (m AppModel) renderFooter() string {
 		status = m.theme.StatusError.Render("✖ " + status)
 	}
 
-	gap := m.width - lipgloss.Width(status) - lipgloss.Width(shortcuts) - 4
-	if gap < 0 {
-		gap = 0
-	}
+	gap := max(m.width-lipgloss.Width(status)-lipgloss.Width(shortcuts)-4, 0)
 
 	return m.theme.StatusBar.Width(m.width).Render(
 		lipgloss.JoinHorizontal(lipgloss.Left, status, strings.Repeat(" ", gap), shortcuts),

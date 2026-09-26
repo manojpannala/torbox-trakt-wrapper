@@ -43,10 +43,3 @@ func renderHelpModal(theme Theme, width int) string {
 
 	return theme.ModalBox.Width(min(58, width-2)).Render(sb.String())
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
