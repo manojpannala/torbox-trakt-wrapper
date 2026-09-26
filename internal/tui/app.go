@@ -35,6 +35,7 @@ type AppModel struct {
 	theme          Theme
 	store          *cache.Store
 	cachedAt       [3]time.Time
+	fetchFailed    uint8
 	reconciledTabs uint8
 	traktSettled   bool
 	heldLaunch     *heldLaunch
@@ -221,21 +222,21 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case TorrentsLoadedMsg:
 		m.loading = false
-		m.cachedAt[TabTorrents] = time.Time{}
+		m.markFresh(TabTorrents)
 		m.torrents = m.convertTorrents(msg.Torrents)
 		m.reapplyFilter()
 		return m, nil
 
 	case UsenetLoadedMsg:
 		m.loading = false
-		m.cachedAt[TabUsenet] = time.Time{}
+		m.markFresh(TabUsenet)
 		m.usenet = m.convertUsenet(msg.Usenet)
 		m.reapplyFilter()
 		return m, nil
 
 	case WebDLLoadedMsg:
 		m.loading = false
-		m.cachedAt[TabWebDL] = time.Time{}
+		m.markFresh(TabWebDL)
 		m.webdl = m.convertWebDL(msg.WebDL)
 		m.reapplyFilter()
 		return m, nil
@@ -250,6 +251,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case LibraryFetchFailedMsg:
 		m.loading = false
+		if !m.cachedAt[msg.Tab].IsZero() {
+			m.fetchFailed |= tabBit(msg.Tab)
+			m.statusText = "Ready"
+			m.isStatusErr = false
+			return m, nil
+		}
 		noun := "torrents"
 		switch msg.Tab {
 		case TabUsenet:
@@ -493,7 +500,7 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case "r":
 		m.loading = true
-		m.statusText = "Refreshing library..."
+		m.statusText = refreshingStatus
 		return m, tea.Batch(m.fetchLibraryCmd(m.activeTab, true), m.fetchTraktCatalogCmd())
 
 	case "a":
@@ -899,6 +906,12 @@ func (m AppModel) renderFooter() string {
 	shortcuts := "[Tab] Switch  [Enter] Stream  [f] Files  [/] Filter  [a] Add  [d] Delete  [A] Trakt  [?] Help  [q] Quit"
 
 	status := m.statusText
+	if status == "Ready" && !m.isStatusErr {
+		failed := m.fetchFailed&tabBit(m.activeTab) != 0
+		if hint := stalenessHint(m.cachedAt[m.activeTab], failed, time.Now()); hint != "" {
+			status = hint
+		}
+	}
 	if m.isStatusErr {
 		status = m.theme.StatusError.Render("✖ " + status)
 	}

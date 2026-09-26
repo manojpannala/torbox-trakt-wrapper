@@ -52,6 +52,27 @@ func tabBit(t TabType) uint8 {
 	return 1 << uint(t)
 }
 
+func stalenessHint(cachedAt time.Time, failed bool, now time.Time) string {
+	if cachedAt.IsZero() {
+		return ""
+	}
+	when := humanizeSince(cachedAt, now)
+	if failed {
+		return "Offline — showing data from " + when
+	}
+	return "Updated " + when + " · refreshing…"
+}
+
+const refreshingStatus = "Refreshing library..."
+
+func (m *AppModel) markFresh(tab TabType) {
+	m.cachedAt[tab] = time.Time{}
+	m.fetchFailed &^= tabBit(tab)
+	if m.statusText == refreshingStatus {
+		m.statusText = "Ready"
+	}
+}
+
 func (m *AppModel) showTab(tab TabType) tea.Cmd {
 	m.activeTab = tab
 	m.cursor = 0

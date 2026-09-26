@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -325,4 +326,71 @@ func TestRefreshKey_BypassesTorBoxsCache(t *testing.T) {
 	}
 	require.Len(t, torrentURLs, 1)
 	assert.Contains(t, torrentURLs[0], "bypass_cache=true")
+}
+
+func TestStalenessHint(t *testing.T) {
+	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+
+	assert.Equal(t, "", stalenessHint(time.Time{}, false, now), "fresh data needs no hint")
+	assert.Equal(t, "Updated 14 minutes ago · refreshing…", stalenessHint(now.Add(-14*time.Minute), false, now))
+	assert.Equal(t, "Offline — showing data from 14 minutes ago", stalenessHint(now.Add(-14*time.Minute), true, now))
+	assert.Equal(t, "Updated just now · refreshing…", stalenessHint(now.Add(-10*time.Second), false, now))
+}
+
+func wideCachedModel(t *testing.T) AppModel {
+	t.Helper()
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxTorrents, []torbox.Torrent{alpha})
+	m := testModel(t, WithCache(store))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 220, Height: 40})
+	return next.(AppModel)
+}
+
+func TestFooter_ShowsTheHintOnlyWhileCachedDataIsOnScreen(t *testing.T) {
+	m := wideCachedModel(t)
+	assert.Contains(t, m.renderFooter(), "refreshing…")
+
+	next, _ := m.Update(TorrentsLoadedMsg{Torrents: []torbox.Torrent{alpha}})
+
+	assert.NotContains(t, next.(AppModel).renderFooter(), "refreshing…")
+}
+
+func TestFooter_SaysOfflineWhenAReconcileFailsOverCachedData(t *testing.T) {
+	m := wideCachedModel(t)
+
+	next, _ := m.Update(LibraryFetchFailedMsg{Tab: TabTorrents, Err: errors.New("dial tcp: refused")})
+
+	footer := next.(AppModel).renderFooter()
+	assert.Contains(t, footer, "Offline — showing data from")
+	assert.NotContains(t, footer, "Failed to load")
+}
+
+func TestFooter_KeepsTheErrorWhenThereIsNoCachedData(t *testing.T) {
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 220, Height: 40})
+
+	next, _ = next.(AppModel).Update(LibraryFetchFailedMsg{Tab: TabTorrents, Err: errors.New("boom")})
+
+	assert.Contains(t, next.(AppModel).renderFooter(), "Failed to load torrents")
+}
+
+func TestRefresh_ClearsItsOwnStatusWhenFreshDataLands(t *testing.T) {
+	m := testModel(t)
+
+	next, _ := m.handleKeyMsg(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	require.Equal(t, "Refreshing library...", next.(AppModel).statusText)
+
+	next, _ = next.(AppModel).Update(TorrentsLoadedMsg{Torrents: []torbox.Torrent{alpha}})
+
+	assert.Equal(t, "Ready", next.(AppModel).statusText)
+}
+
+func TestFreshData_LeavesOtherStatusMessagesAlone(t *testing.T) {
+	m := testModel(t)
+	m.statusText = "Playback finished"
+
+	next, _ := m.Update(TorrentsLoadedMsg{Torrents: []torbox.Torrent{alpha}})
+
+	assert.Equal(t, "Playback finished", next.(AppModel).statusText)
 }
