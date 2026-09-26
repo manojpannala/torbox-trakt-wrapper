@@ -14,6 +14,7 @@ type pendingResume struct {
 	title    string
 	percent  float64
 	pausedAt time.Time
+	stale    bool
 	play     func(resumePercent float64) tea.Cmd
 }
 
@@ -36,7 +37,12 @@ func renderResumeModal(theme Theme, p *pendingResume, width int) string {
 		stopped += ", " + when
 	}
 	sb.WriteString(body.Render(stopped + "."))
-	sb.WriteString("\n\n")
+	sb.WriteString("\n")
+	if p.stale {
+		sb.WriteString(body.Render("  Trakt is unreachable — this position may be out of date."))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n")
 
 	// the button styles already carry padding and a right margin
 	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Left,

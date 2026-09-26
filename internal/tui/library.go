@@ -52,7 +52,7 @@ func tabBit(t TabType) uint8 {
 	return 1 << uint(t)
 }
 
-func stalenessHint(cachedAt time.Time, failed bool, now time.Time) string {
+func stalenessHint(cachedAt time.Time, failed, refreshing bool, now time.Time) string {
 	if cachedAt.IsZero() {
 		return ""
 	}
@@ -60,7 +60,10 @@ func stalenessHint(cachedAt time.Time, failed bool, now time.Time) string {
 	if failed {
 		return "Offline — showing data from " + when
 	}
-	return "Updated " + when + " · refreshing…"
+	if refreshing {
+		return "Updated " + when + " · refreshing…"
+	}
+	return "Updated " + when
 }
 
 const refreshingStatus = "Refreshing library..."
@@ -68,6 +71,7 @@ const refreshingStatus = "Refreshing library..."
 func (m *AppModel) markFresh(tab TabType) {
 	m.cachedAt[tab] = time.Time{}
 	m.fetchFailed &^= tabBit(tab)
+	m.inFlight &^= tabBit(tab)
 	if m.statusText == refreshingStatus {
 		m.statusText = "Ready"
 	}
@@ -89,6 +93,10 @@ func (m *AppModel) showTab(tab TabType) tea.Cmd {
 	if !cachedAt.IsZero() && ttl > 0 && time.Since(cachedAt) < ttl {
 		return nil
 	}
+	if cachedAt.IsZero() {
+		m.loading = true
+	}
+	m.inFlight |= tabBit(tab)
 	return m.fetchLibraryCmd(tab, false)
 }
 
@@ -109,5 +117,6 @@ func (m *AppModel) releaseHeldLaunch() tea.Cmd {
 		return nil
 	}
 	m.statusText = "Ready"
+	m.isStatusErr = false
 	return m.beginStream(h.title, h.parsed, h.play)
 }

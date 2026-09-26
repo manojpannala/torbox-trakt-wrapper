@@ -36,9 +36,12 @@ type AppModel struct {
 	store          *cache.Store
 	cachedAt       [3]time.Time
 	fetchFailed    uint8
+	inFlight       uint8
 	reconciledTabs uint8
 	traktSettled   bool
+	traktFailed    bool
 	heldLaunch     *heldLaunch
+	deleteTarget   *LibraryItem
 
 	width  int
 	height int
@@ -160,6 +163,11 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		initialTab = TabWebDL
 	}
 
+	var inFlight uint8
+	if tbClient != nil {
+		inFlight = tabBit(initialTab)
+	}
+
 	m := AppModel{
 		ctx:            ctx,
 		cancel:         cancel,
@@ -170,6 +178,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		player:         mpvPlayer,
 		theme:          theme,
 		store:          settings.store,
+		inFlight:       inFlight,
 		reconciledTabs: tabBit(initialTab),
 		activeTab:      initialTab,
 		activeView:     ViewLibrary,
@@ -243,6 +252,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case TraktCatalogLoadedMsg:
 		m.traktSettled = true
+		m.traktFailed = false
 		m.matcher.UpdateCatalog(msg.Movies, msg.Shows, msg.Playback)
 		m.recalculateBadges()
 		m.reapplyFilter()
@@ -251,10 +261,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case LibraryFetchFailedMsg:
 		m.loading = false
+		m.inFlight &^= tabBit(msg.Tab)
 		if !m.cachedAt[msg.Tab].IsZero() {
 			m.fetchFailed |= tabBit(msg.Tab)
-			m.statusText = "Ready"
-			m.isStatusErr = false
+			if m.statusText == refreshingStatus {
+				m.statusText = "Ready"
+				m.isStatusErr = false
+			}
 			return m, nil
 		}
 		noun := "torrents"
@@ -270,6 +283,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case TraktCatalogFailedMsg:
 		m.traktSettled = true
+		m.traktFailed = true
 		cmd := m.releaseHeldLaunch()
 		return m, cmd
 
@@ -321,6 +335,7 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.heldLaunch != nil && msg.String() == "esc" && m.activeModal == ModalNone && !m.searchActive {
 		m.heldLaunch = nil
 		m.statusText = "Ready"
+		m.isStatusErr = false
 		return m, nil
 	}
 
@@ -374,9 +389,15 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y", "Y", "enter":
 				m.activeModal = ModalNone
-				return m, m.deleteCurrentItemCmd()
+				target := m.deleteTarget
+				m.deleteTarget = nil
+				if target == nil {
+					return m, nil
+				}
+				return m, m.deleteItemCmd(*target)
 			case "n", "N", "esc", "q":
 				m.activeModal = ModalNone
+				m.deleteTarget = nil
 				return m, nil
 			}
 			return m, nil
@@ -506,6 +527,7 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.loading = true
 		m.statusText = refreshingStatus
+		m.inFlight |= tabBit(m.activeTab)
 		return m, tea.Batch(m.fetchLibraryCmd(m.activeTab, true), m.fetchTraktCatalogCmd())
 
 	case "a":
@@ -518,7 +540,9 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 
 	case "d", "x":
-		if len(m.currentItems()) > 0 {
+		if sel := m.selectedCurrentItem(); sel != nil {
+			item := *sel
+			m.deleteTarget = &item
 			m.activeModal = ModalDelete
 		}
 		return m, nil
@@ -770,7 +794,7 @@ func (m AppModel) View() tea.View {
 		case ModalResume:
 			modalView = renderResumeModal(m.theme, m.resumePrompt, m.width)
 		case ModalDelete:
-			modalView = renderDeleteModal(m.theme, m.selectedCurrentItem(), m.width)
+			modalView = renderDeleteModal(m.theme, m.deleteTarget, m.width)
 		case ModalAdd:
 			modalView = m.addModal.Render(m.theme, m.width)
 		case ModalAuth:
@@ -927,7 +951,8 @@ func (m AppModel) renderFooter() string {
 	status := m.statusText
 	if status == "Ready" && !m.isStatusErr {
 		failed := m.fetchFailed&tabBit(m.activeTab) != 0
-		if hint := stalenessHint(m.cachedAt[m.activeTab], failed, time.Now()); hint != "" {
+		refreshing := m.inFlight&tabBit(m.activeTab) != 0
+		if hint := stalenessHint(m.cachedAt[m.activeTab], failed, refreshing, time.Now()); hint != "" {
 			status = hint
 		}
 	}
@@ -1056,7 +1081,7 @@ func (m *AppModel) beginStream(title string, parsed matcher.ParsedMedia, play fu
 	if percent <= 0 {
 		return play(0)
 	}
-	m.resumePrompt = &pendingResume{title: title, percent: percent, pausedAt: pausedAt, play: play}
+	m.resumePrompt = &pendingResume{title: title, percent: percent, pausedAt: pausedAt, stale: m.traktFailed, play: play}
 	m.activeModal = ModalResume
 	return nil
 }
@@ -1276,12 +1301,7 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 	})
 }
 
-func (m AppModel) deleteCurrentItemCmd() tea.Cmd {
-	item := m.selectedCurrentItem()
-	if item == nil {
-		return nil
-	}
-
+func (m AppModel) deleteItemCmd(item LibraryItem) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

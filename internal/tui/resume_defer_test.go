@@ -77,6 +77,16 @@ func TestDeferral_FailedFetchReleasesAgainstTheCache(t *testing.T) {
 	v := viewText(m)
 	assert.Contains(t, v, "Resume Playback", "offline must never hang the launch")
 	assert.Contains(t, v, "about 40%")
+	assert.Contains(t, v, "Trakt is unreachable", "a stale cached position must say so where the user acts on it")
+}
+
+func TestDeferral_FreshCatalogDoesNotClaimTraktIsUnreachable(t *testing.T) {
+	m := deferModel(t, nil)
+	m, _ = sendKey(m, enterKey)
+
+	m, _ = sendMsg(m, freshCatalog(70))
+
+	assert.NotContains(t, viewText(m), "Trakt is unreachable")
 }
 
 func TestDeferral_DoesNotHoldOnceSettled(t *testing.T) {

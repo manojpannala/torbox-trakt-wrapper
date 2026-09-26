@@ -233,6 +233,32 @@ func usenetOK(t *testing.T) *recorder {
 	})
 }
 
+func TestFirstShow_ColdTabShowsASpinnerWhileItLoads(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+	m.loading = false
+
+	cmd := m.showTab(TabUsenet)
+
+	require.NotNil(t, cmd)
+	assert.True(t, m.loading, "a cold tab with no data must show a spinner while its fetch runs")
+}
+
+func TestFirstShow_StaleCachedTabKeepsItsListVisibleWithNoSpinner(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxUsenet, []torbox.UsenetItem{{ID: 2, Name: "y"}})
+	m := testModel(t, WithCache(store))
+	m.cachedAt[TabUsenet] = time.Now().Add(-time.Hour)
+	m.loading = false
+
+	cmd := m.showTab(TabUsenet)
+
+	require.NotNil(t, cmd)
+	assert.False(t, m.loading, "a stale cached tab keeps its list visible with no spinner")
+}
+
 func TestFirstShow_FetchesATabWithNoData(t *testing.T) {
 	rec := usenetOK(t)
 	store, _ := newTestStore(t)
@@ -331,10 +357,81 @@ func TestRefreshKey_BypassesTorBoxsCache(t *testing.T) {
 func TestStalenessHint(t *testing.T) {
 	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
 
-	assert.Equal(t, "", stalenessHint(time.Time{}, false, now), "fresh data needs no hint")
-	assert.Equal(t, "Updated 14 minutes ago · refreshing…", stalenessHint(now.Add(-14*time.Minute), false, now))
-	assert.Equal(t, "Offline — showing data from 14 minutes ago", stalenessHint(now.Add(-14*time.Minute), true, now))
-	assert.Equal(t, "Updated just now · refreshing…", stalenessHint(now.Add(-10*time.Second), false, now))
+	assert.Equal(t, "", stalenessHint(time.Time{}, false, false, now), "fresh data needs no hint")
+	assert.Equal(t, "Updated 14 minutes ago · refreshing…", stalenessHint(now.Add(-14*time.Minute), false, true, now))
+	assert.Equal(t, "Offline — showing data from 14 minutes ago", stalenessHint(now.Add(-14*time.Minute), true, true, now))
+	assert.Equal(t, "Updated just now · refreshing…", stalenessHint(now.Add(-10*time.Second), false, true, now))
+	assert.Equal(t, "Updated 14 minutes ago", stalenessHint(now.Add(-14*time.Minute), false, false, now), "no fetch is in flight, so it must not claim to be refreshing")
+}
+
+func TestFooter_ATabSkippedByTTLDoesNotClaimToRefresh(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxUsenet, []torbox.UsenetItem{{ID: 2, Name: "y"}})
+	m := testModel(t, WithCache(store))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 220, Height: 40})
+	m = next.(AppModel)
+
+	cmd := m.showTab(TabUsenet)
+
+	require.Nil(t, cmd, "the cache is fresh, so nothing fetches")
+	footer := m.renderFooter()
+	assert.Contains(t, footer, "Updated")
+	assert.NotContains(t, footer, "refreshing")
+}
+
+func TestFooter_AColdShowThatFetchesDoesShowRefreshing(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxUsenet, []torbox.UsenetItem{{ID: 2, Name: "y"}})
+	m := testModel(t, WithCache(store))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 220, Height: 40})
+	m = next.(AppModel)
+	m.cachedAt[TabUsenet] = time.Now().Add(-time.Hour)
+
+	cmd := m.showTab(TabUsenet)
+
+	require.NotNil(t, cmd, "the cache is stale, so it must fetch")
+	assert.NotZero(t, m.inFlight&tabBit(TabUsenet), "showTab must mark the tab in flight before it returns the fetch")
+	footer := m.renderFooter()
+	assert.Contains(t, footer, "refreshing")
+}
+
+func TestReleaseHeldLaunch_ClearsAStaleErrorFlag(t *testing.T) {
+	m := testModel(t)
+	m.traktSettled = true
+	m.isStatusErr = true
+	played := false
+	m.heldLaunch = &heldLaunch{title: "Test Feature Alpha", play: func(float64) tea.Cmd {
+		played = true
+		return nil
+	}}
+
+	m.releaseHeldLaunch()
+
+	require.True(t, played, "beginStream must take the immediate-play branch for this assertion to be meaningful")
+	assert.False(t, m.isStatusErr, "a stale error flag must not render as '✖ Ready' and hide the staleness hint")
+}
+
+func TestEscapeCancelHeldLaunch_ClearsAStaleErrorFlag(t *testing.T) {
+	m := deferModel(t, nil)
+	m, _ = sendKey(m, enterKey)
+	m.isStatusErr = true
+
+	m, _ = sendKey(m, escKey)
+
+	assert.False(t, m.isStatusErr)
+	assert.Equal(t, "Ready", m.statusText)
+}
+
+func TestLibraryFetchFailedOverCache_LeavesAnUnrelatedStatusMessageAlone(t *testing.T) {
+	m := wideCachedModel(t)
+	m.statusText = "Checking your position…"
+
+	next, _ := m.Update(LibraryFetchFailedMsg{Tab: TabTorrents, Err: errors.New("dial tcp: refused")})
+
+	got := next.(AppModel)
+	assert.Equal(t, "Checking your position…", got.statusText, "a background reconcile over cached data must never clobber an unrelated status message")
 }
 
 func wideCachedModel(t *testing.T) AppModel {
