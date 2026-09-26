@@ -24,17 +24,18 @@ import (
 )
 
 type AppModel struct {
-	resumePrompt *pendingResume
-	ctx          context.Context
-	cancel       context.CancelFunc
-	cfg          *config.Config
-	torboxClient *torbox.Client
-	traktClient  *trakt.Client
-	matcher      *matcher.Matcher
-	player       player.Player
-	theme        Theme
-	store        *cache.Store
-	cachedAt     [3]time.Time
+	resumePrompt   *pendingResume
+	ctx            context.Context
+	cancel         context.CancelFunc
+	cfg            *config.Config
+	torboxClient   *torbox.Client
+	traktClient    *trakt.Client
+	matcher        *matcher.Matcher
+	player         player.Player
+	theme          Theme
+	store          *cache.Store
+	cachedAt       [3]time.Time
+	reconciledTabs uint8
 
 	width  int
 	height int
@@ -157,24 +158,25 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 	}
 
 	m := AppModel{
-		ctx:          ctx,
-		cancel:       cancel,
-		cfg:          cfg,
-		torboxClient: tbClient,
-		traktClient:  trClient,
-		matcher:      matcherEngine,
-		player:       mpvPlayer,
-		theme:        theme,
-		store:        settings.store,
-		activeTab:    initialTab,
-		activeView:   ViewLibrary,
-		activeModal:  ModalNone,
-		searchInput:  ti,
-		spinner:      sp,
-		addModal:     NewAddModal(),
-		authModal:    NewAuthModal(),
-		loading:      true,
-		statusText:   "Ready",
+		ctx:            ctx,
+		cancel:         cancel,
+		cfg:            cfg,
+		torboxClient:   tbClient,
+		traktClient:    trClient,
+		matcher:        matcherEngine,
+		player:         mpvPlayer,
+		theme:          theme,
+		store:          settings.store,
+		reconciledTabs: tabBit(initialTab),
+		activeTab:      initialTab,
+		activeView:     ViewLibrary,
+		activeModal:    ModalNone,
+		searchInput:    ti,
+		spinner:        sp,
+		addModal:       NewAddModal(),
+		authModal:      NewAuthModal(),
+		loading:        true,
+		statusText:     "Ready",
 	}
 	m.seedFromCache()
 	return m
@@ -421,32 +423,20 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab":
-		m.activeTab = (m.activeTab + 1) % 3
-		m.cursor = 0
-		m.topIndex = 0
-		m.reapplyFilter()
-		return m, nil
+		cmd := m.showTab((m.activeTab + 1) % 3)
+		return m, cmd
 
 	case "1":
-		m.activeTab = TabTorrents
-		m.cursor = 0
-		m.topIndex = 0
-		m.reapplyFilter()
-		return m, nil
+		cmd := m.showTab(TabTorrents)
+		return m, cmd
 
 	case "2":
-		m.activeTab = TabUsenet
-		m.cursor = 0
-		m.topIndex = 0
-		m.reapplyFilter()
-		return m, nil
+		cmd := m.showTab(TabUsenet)
+		return m, cmd
 
 	case "3":
-		m.activeTab = TabWebDL
-		m.cursor = 0
-		m.topIndex = 0
-		m.reapplyFilter()
-		return m, nil
+		cmd := m.showTab(TabWebDL)
+		return m, cmd
 
 	case "up", "k":
 		if m.cursor > 0 {

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -220,4 +222,107 @@ func TestCachedPayloadsCarryNoCredentials(t *testing.T) {
 			assert.NotContains(t, lower, secret, "%s leaked into %s", secret, f.Name())
 		}
 	}
+}
+
+func usenetOK(t *testing.T) *recorder {
+	t.Helper()
+	return stubAPI(t, "TORBOX_BASE_URL", map[string]func(http.ResponseWriter){
+		"/usenet/mylist":   respond(200, `{"success":true,"data":[]}`),
+		"/torrents/mylist": respond(200, `{"success":true,"data":[]}`),
+	})
+}
+
+func TestFirstShow_FetchesATabWithNoData(t *testing.T) {
+	rec := usenetOK(t)
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+
+	cmd := m.showTab(TabUsenet)
+
+	require.NotNil(t, cmd, "Usenet used to stay empty until r")
+	cmd()
+	require.Len(t, rec.all(), 1)
+	assert.NotContains(t, rec.all()[0], "bypass_cache")
+}
+
+func TestFirstShow_SkipsAFreshCache(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxUsenet, []torbox.UsenetItem{{ID: 2, Name: "y"}})
+	m := testModel(t, WithCache(store))
+
+	assert.Nil(t, m.showTab(TabUsenet))
+}
+
+func TestFirstShow_FetchesAStaleCache(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxUsenet, []torbox.UsenetItem{{ID: 2, Name: "y"}})
+	m := testModel(t, WithCache(store))
+	m.cachedAt[TabUsenet] = time.Now().Add(-time.Hour)
+
+	assert.NotNil(t, m.showTab(TabUsenet))
+}
+
+func TestFirstShow_ZeroTTLAlwaysFetches(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	cache.Write(store, cache.TorBoxUsenet, []torbox.UsenetItem{{ID: 2, Name: "y"}})
+	m := testModelWith(t, func(c *config.Config) { c.TorBox.CacheTTLMinutes = 0 }, WithCache(store))
+
+	assert.NotNil(t, m.showTab(TabUsenet))
+}
+
+func TestSecondShow_NeverFetches(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+
+	require.NotNil(t, m.showTab(TabUsenet))
+	m.showTab(TabTorrents)
+
+	assert.Nil(t, m.showTab(TabUsenet))
+}
+
+func TestActiveTab_IsNotRefetchedOnFirstShow(t *testing.T) {
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+
+	assert.Nil(t, m.showTab(TabTorrents), "launch already reconciled it")
+}
+
+func TestNumberKey_ShowsTheTabAndReconcilesIt(t *testing.T) {
+	usenetOK(t)
+	store, _ := newTestStore(t)
+	m := testModel(t, WithCache(store))
+
+	next, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: '2', Text: "2"})
+
+	assert.Equal(t, TabUsenet, next.(AppModel).activeTab)
+	assert.NotNil(t, cmd)
+}
+
+func TestRefreshKey_BypassesTorBoxsCache(t *testing.T) {
+	rec := usenetOK(t)
+	traktOK(t)
+	m := testModel(t)
+
+	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	require.NotNil(t, cmd)
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c != nil {
+				c()
+			}
+		}
+	}
+
+	var torrentURLs []string
+	for _, u := range rec.all() {
+		if strings.HasPrefix(u, "/torrents/") {
+			torrentURLs = append(torrentURLs, u)
+		}
+	}
+	require.Len(t, torrentURLs, 1)
+	assert.Contains(t, torrentURLs[0], "bypass_cache=true")
 }

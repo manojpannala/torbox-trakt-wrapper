@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/cache"
@@ -43,4 +45,27 @@ func (m *AppModel) seedFromCache() {
 
 func (m AppModel) launchCmds() []tea.Cmd {
 	return []tea.Cmd{m.fetchLibraryCmd(m.activeTab, false), m.fetchTraktCatalogCmd()}
+}
+
+func tabBit(t TabType) uint8 {
+	return 1 << uint(t)
+}
+
+func (m *AppModel) showTab(tab TabType) tea.Cmd {
+	m.activeTab = tab
+	m.cursor = 0
+	m.topIndex = 0
+	m.reapplyFilter()
+
+	if m.reconciledTabs&tabBit(tab) != 0 {
+		return nil
+	}
+	m.reconciledTabs |= tabBit(tab)
+
+	cachedAt := m.cachedAt[tab]
+	ttl := time.Duration(m.cfg.TorBox.CacheTTLMinutes) * time.Minute
+	if !cachedAt.IsZero() && ttl > 0 && time.Since(cachedAt) < ttl {
+		return nil
+	}
+	return m.fetchLibraryCmd(tab, false)
 }
