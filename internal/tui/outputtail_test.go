@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -62,7 +64,9 @@ func TestOutputTail_RealMpvFailureIsCaptured(t *testing.T) {
 		t.Skip("mpv not installed")
 	}
 
-	c := exec.Command("mpv", "--vfs-cache-max-size=5G", "/dev/null")
+	home := t.TempDir()
+	c := exec.Command("mpv", "--no-config", "--vfs-cache-max-size=5G", "/dev/null")
+	c.Env = append(os.Environ(), "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"))
 	tail := &outputTail{}
 	c.Stdout = tail
 	c.Stderr = tail
