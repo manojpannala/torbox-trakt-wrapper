@@ -11,14 +11,6 @@ import (
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 )
 
-type scrobbleAction int
-
-const (
-	scrobbleNone scrobbleAction = iota
-	scrobbleStart
-	scrobblePause
-)
-
 type Monitor struct {
 	client       *IPCClient
 	media        matcher.ParsedMedia
