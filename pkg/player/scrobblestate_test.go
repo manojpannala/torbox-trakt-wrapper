@@ -92,6 +92,27 @@ func TestScrobbleState_Rules(t *testing.T) {
 			{time.Second, snapshot{timePos: 3, percentPos: 1, restarts: 1}, scrobbleStart, 0},
 			{5 * time.Second, snapshot{timePos: 7, percentPos: 3, restarts: 1}, scrobbleNone, 0},
 		}},
+		{"no start while mpv seeks to the resume point", []ruleStep{
+			{0, snapshot{timePos: 30, percentPos: 100, seeking: true}, scrobbleNone, 0},
+			{100 * ms, snapshot{timePos: 30, percentPos: 3.3, seeking: true, restarts: 1}, scrobbleNone, 0},
+			{200 * ms, snapshot{timePos: 30, percentPos: 3.3, restarts: 1}, scrobbleStart, 0},
+			{3 * time.Second, snapshot{timePos: 33, percentPos: 3.4, restarts: 1}, scrobbleNone, 0},
+		}},
+		{"a seek re-start waits for the seek to finish", []ruleStep{
+			{0, playingAt(5), scrobbleStart, 0},
+			{5 * time.Second, snapshot{timePos: 80, percentPos: 40, seeking: true, restarts: 1}, scrobbleNone, 0},
+			{5100 * ms, snapshot{timePos: 80, percentPos: 40, restarts: 1}, scrobbleStart, 0},
+		}},
+		{"resume during a seek waits for the seek to finish", []ruleStep{
+			{0, playingAt(5), scrobbleStart, 0},
+			{2 * time.Second, pausedAt(5), scrobblePause, 0},
+			{4 * time.Second, snapshot{timePos: 80, percentPos: 40, seeking: true, restarts: 1}, scrobbleNone, 0},
+			{4100 * ms, snapshot{timePos: 80, percentPos: 40, restarts: 1}, scrobbleStart, 0},
+		}},
+		{"pause is not held by a seek", []ruleStep{
+			{0, playingAt(5), scrobbleStart, 0},
+			{2 * time.Second, snapshot{timePos: 10, percentPos: 5, paused: true, seeking: true}, scrobblePause, 0},
+		}},
 		{"a pause and resume inside the spacing window collapse to nothing", []ruleStep{
 			{0, playingAt(5), scrobbleStart, 0},
 			{400 * ms, pausedAt(5), scrobblePause, 600 * ms},

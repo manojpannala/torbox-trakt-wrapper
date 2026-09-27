@@ -12,7 +12,9 @@ import (
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 )
 
-var observedProperties = []string{"time-pos", "percent-pos", "pause", "duration"}
+// seeking comes first: mpv sends one batch of changes in observation order, so
+// the monitor sees a seek begin before the positions it reports mid-seek.
+var observedProperties = []string{"seeking", "time-pos", "percent-pos", "pause", "duration"}
 
 // scrobbleCallTimeout bounds every Trakt call the monitor makes, including the
 // final Stop, so none of them can hold up shutdown indefinitely.
@@ -153,6 +155,8 @@ func (m *Monitor) onPropertyChange(name string, data json.RawMessage) {
 	}
 	m.mu.Lock()
 	switch name {
+	case "seeking":
+		_ = json.Unmarshal(data, &m.snap.seeking)
 	case "time-pos":
 		_ = json.Unmarshal(data, &m.snap.timePos)
 	case "percent-pos":

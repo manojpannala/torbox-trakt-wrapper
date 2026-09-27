@@ -19,6 +19,7 @@ type snapshot struct {
 	percentPos float64
 	duration   float64
 	paused     bool
+	seeking    bool
 	restarts   uint64
 }
 
@@ -47,6 +48,16 @@ func (s *scrobbleState) next(snap snapshot, now time.Time) (scrobbleAction, time
 }
 
 func (s *scrobbleState) due(snap snapshot) scrobbleAction {
+	action := s.dueIgnoringSeek(snap)
+	// A Start sent mid-seek reports a position mpv has not reached yet, and the
+	// playback-restart that ends the seek would then send another.
+	if action == scrobbleStart && snap.seeking {
+		return scrobbleNone
+	}
+	return action
+}
+
+func (s *scrobbleState) dueIgnoringSeek(snap snapshot) scrobbleAction {
 	switch s.told {
 	case toldNothing:
 		// percent-pos arrives as its own event after time-pos; waiting for it

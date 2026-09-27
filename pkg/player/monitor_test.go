@@ -240,7 +240,7 @@ func TestMonitor_NoIPCRequestsWhilePaused(t *testing.T) {
 	rec.waitForCalls(t, 2)
 	time.Sleep(1500 * time.Millisecond)
 
-	assert.Equal(t, 4, fake.Requests(), "only the four observe_property commands")
+	assert.Equal(t, 5, fake.Requests(), "only the five observe_property commands")
 	assert.Zero(t, fake.Gets())
 }
 
@@ -289,6 +289,30 @@ func TestMonitor_SeekWhilePlayingResendsStart(t *testing.T) {
 	calls := rec.snapshot()
 	assert.Equal(t, "start", calls[1].kind)
 	assert.InDelta(t, 40.0, calls[1].progress, 0.001)
+}
+
+func TestMonitor_ResumeJumpSendsOneStart(t *testing.T) {
+	fake := startFakeMPV(t, map[string]any{
+		"seeking": true, "time-pos": 30.0, "percent-pos": 100.0, "pause": false, "duration": 200.0,
+	})
+	rec := &recordingScrobbler{}
+	startEventMonitor(t, fake, rec)
+
+	// Longer than one poll interval, so a monitor ignoring seeking would have started.
+	time.Sleep(1300 * time.Millisecond)
+	assert.Empty(t, rec.snapshot(), "no start mid-seek")
+
+	fake.Set("percent-pos", 15.0)
+	fake.Emit("playback-restart")
+	fake.Set("seeking", false)
+	rec.waitForCalls(t, 1)
+
+	// Past the spacing window, so a second Start would have been sent by now.
+	time.Sleep(1300 * time.Millisecond)
+	calls := rec.snapshot()
+	require.Len(t, calls, 1, "the resume jump is not a seek")
+	assert.Equal(t, "start", calls[0].kind)
+	assert.InDelta(t, 15.0, calls[0].progress, 0.001)
 }
 
 func TestMonitor_StopKeepsLastPositionWhenPropertiesGoUnavailable(t *testing.T) {
