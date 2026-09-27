@@ -14,6 +14,7 @@ func TestPathResolvers(t *testing.T) {
 	t.Run("default paths without XDG", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", "")
 		t.Setenv("XDG_CACHE_HOME", "")
+		t.Setenv("XDG_STATE_HOME", "")
 
 		cfgDir := GetConfigDir()
 		cfgFile := GetConfigFile()
