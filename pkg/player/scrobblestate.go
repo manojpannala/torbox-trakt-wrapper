@@ -17,7 +17,7 @@ const scrobbleSpacing = time.Second
 type snapshot struct {
 	timePos    float64
 	percentPos float64
-	duration   float64 //nolint:unused // read by the monitor
+	duration   float64
 	paused     bool
 	restarts   uint64
 }
