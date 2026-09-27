@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -155,4 +156,48 @@ func TestIPCClient_TimeoutAndClosed(t *testing.T) {
 
 	_, err := player.DialIPC(ctx, "/tmp/nonexistent-sock-path.sock", 100*time.Millisecond)
 	require.Error(t, err)
+}
+
+func TestIPCClient_PropertyChangesReachHooksRegisteredBeforeObserving(t *testing.T) {
+	fake := startFakeMPV(t, map[string]any{"time-pos": 12.5})
+	client := dialFake(t, fake)
+
+	type change struct{ name, data string }
+	changes := make(chan change, 8)
+	client.OnPropertyChange(func(name string, data json.RawMessage) {
+		changes <- change{name, string(data)}
+	})
+	var mu sync.Mutex
+	var events []string
+	client.OnEvent(func(event string, _ json.RawMessage) {
+		mu.Lock()
+		events = append(events, event)
+		mu.Unlock()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	require.NoError(t, client.ObserveProperty(ctx, "time-pos"))
+	assert.Equal(t, change{"time-pos", "12.5"}, receive(t, changes), "observe_property's immediate value")
+
+	fake.Emit("playback-restart")
+	fake.Set("time-pos", 13.25)
+	assert.Equal(t, change{"time-pos", "13.25"}, receive(t, changes), "a non-property event must not reach property hooks")
+
+	fake.Unset("time-pos")
+	assert.Equal(t, change{"time-pos", ""}, receive(t, changes), "an unavailable property arrives with no data")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, events, "playback-restart")
+}
+
+func TestIPCClient_ObservePropertyReportsRejection(t *testing.T) {
+	fake := startFakeMPV(t, nil)
+	fake.RejectObserve()
+	client := dialFake(t, fake)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	require.Error(t, client.ObserveProperty(ctx, "time-pos"))
 }

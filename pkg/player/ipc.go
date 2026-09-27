@@ -27,6 +27,7 @@ type ipcResponse struct {
 	Data      json.RawMessage `json:"data,omitempty"`
 	RequestID uint64          `json:"request_id,omitempty"`
 	Event     string          `json:"event,omitempty"`
+	Name      string          `json:"name,omitempty"`
 }
 
 type IPCClient struct {
@@ -37,7 +38,9 @@ type IPCClient struct {
 	pending    map[uint64]chan ipcResponse
 	closed     chan struct{}
 	closeOnce  sync.Once
+	observeSeq atomic.Int64
 	eventHooks []func(event string, data json.RawMessage)
+	propHooks  []func(name string, data json.RawMessage)
 }
 
 func DialIPC(ctx context.Context, socketPath string, maxWait time.Duration) (*IPCClient, error) {
@@ -96,9 +99,17 @@ func (c *IPCClient) readLoop() {
 			c.mu.Lock()
 			hooks := make([]func(string, json.RawMessage), len(c.eventHooks))
 			copy(hooks, c.eventHooks)
+			var propHooks []func(string, json.RawMessage)
+			if resp.Event == "property-change" {
+				propHooks = make([]func(string, json.RawMessage), len(c.propHooks))
+				copy(propHooks, c.propHooks)
+			}
 			c.mu.Unlock()
 			for _, hook := range hooks {
 				hook(resp.Event, resp.Data)
+			}
+			for _, hook := range propHooks {
+				hook(resp.Name, resp.Data)
 			}
 			continue
 		}
@@ -190,6 +201,19 @@ func (c *IPCClient) GetBoolProperty(ctx context.Context, prop string) (bool, err
 		return false, err
 	}
 	return val, nil
+}
+
+func (c *IPCClient) ObserveProperty(ctx context.Context, name string) error {
+	_, err := c.SendCommand(ctx, "observe_property", c.observeSeq.Add(1), name)
+	return err
+}
+
+// OnPropertyChange hooks run on the reader goroutine and must not block. data
+// is empty when mpv reports the property unavailable, as it does on unload.
+func (c *IPCClient) OnPropertyChange(hook func(name string, data json.RawMessage)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.propHooks = append(c.propHooks, hook)
 }
 
 func (c *IPCClient) OnEvent(hook func(event string, data json.RawMessage)) {
