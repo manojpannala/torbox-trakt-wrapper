@@ -50,6 +50,7 @@ func (m *mockScrobbler) Stop(ctx context.Context, media matcher.ParsedMedia, pro
 }
 
 func TestMonitor_ScrobbleLifecycle(t *testing.T) {
+	t.Parallel()
 	var stateMu sync.RWMutex
 	var currentPos = 10.0
 	var percentPos = 5.0
@@ -215,6 +216,7 @@ func (b *blockingStartScrobbler) Start(ctx context.Context, _ matcher.ParsedMedi
 }
 
 func TestMonitor_PauseAndResumeInsideOneSecondBothReachTrakt(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	mon := startEventMonitor(t, fake, rec)
@@ -233,6 +235,7 @@ func TestMonitor_PauseAndResumeInsideOneSecondBothReachTrakt(t *testing.T) {
 }
 
 func TestMonitor_NoIPCRequestsWhilePaused(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	startEventMonitor(t, fake, rec)
@@ -247,6 +250,7 @@ func TestMonitor_NoIPCRequestsWhilePaused(t *testing.T) {
 }
 
 func TestMonitor_OpenedPausedSendsNothing(t *testing.T) {
+	t.Parallel()
 	props := playingProps()
 	props["pause"] = true
 	fake := startFakeMPV(t, props)
@@ -261,6 +265,7 @@ func TestMonitor_OpenedPausedSendsNothing(t *testing.T) {
 }
 
 func TestMonitor_StartsWhenFirstUnpaused(t *testing.T) {
+	t.Parallel()
 	props := playingProps()
 	props["pause"] = true
 	fake := startFakeMPV(t, props)
@@ -278,6 +283,7 @@ func TestMonitor_StartsWhenFirstUnpaused(t *testing.T) {
 }
 
 func TestMonitor_SeekWhilePlayingResendsStart(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	startEventMonitor(t, fake, rec)
@@ -294,6 +300,7 @@ func TestMonitor_SeekWhilePlayingResendsStart(t *testing.T) {
 }
 
 func TestMonitor_ResumeJumpSendsOneStart(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, map[string]any{
 		"seeking": true, "time-pos": 30.0, "percent-pos": 100.0, "pause": false, "duration": 200.0,
 	})
@@ -318,6 +325,7 @@ func TestMonitor_ResumeJumpSendsOneStart(t *testing.T) {
 }
 
 func TestMonitor_StopKeepsLastPositionWhenPropertiesGoUnavailable(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	mon := startEventMonitor(t, fake, rec)
@@ -336,6 +344,7 @@ func TestMonitor_StopKeepsLastPositionWhenPropertiesGoUnavailable(t *testing.T) 
 }
 
 func TestMonitor_FallsBackToPollingWhenObserveIsRejected(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	fake.RejectObserve()
 	rec := &recordingScrobbler{}
@@ -349,6 +358,7 @@ func TestMonitor_FallsBackToPollingWhenObserveIsRejected(t *testing.T) {
 }
 
 func TestMonitor_StopCancelsAnInFlightScrobbleCall(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	scrobbler := newBlockingStartScrobbler()
 	mon := startEventMonitor(t, fake, scrobbler)
@@ -377,6 +387,7 @@ func TestMonitor_StopCancelsAnInFlightScrobbleCall(t *testing.T) {
 }
 
 func TestMonitor_ContextCancelSendsFinalStopThenStopReturnsPromptly(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	media := matcher.ParsedMedia{CleanTitle: "Test Movie Alpha", Year: 2023, Type: matcher.MediaTypeMovie}
@@ -402,6 +413,7 @@ func TestMonitor_ContextCancelSendsFinalStopThenStopReturnsPromptly(t *testing.T
 }
 
 func TestMonitor_HangupThenStopSendsLastKnownPercent(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	mon := startEventMonitor(t, fake, rec)
@@ -421,6 +433,7 @@ func TestMonitor_HangupThenStopSendsLastKnownPercent(t *testing.T) {
 }
 
 func TestMonitor_EndsWhenMpvHangsUpWithoutStop(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	sock := filepath.Join(t.TempDir(), "mpv.sock")
@@ -447,6 +460,7 @@ func TestMonitor_EndsWhenMpvHangsUpWithoutStop(t *testing.T) {
 }
 
 func TestMonitor_StartedOnAClosedClientEndsWithoutScrobbling(t *testing.T) {
+	t.Parallel()
 	fake := startFakeMPV(t, playingProps())
 	rec := &recordingScrobbler{}
 	sock := filepath.Join(t.TempDir(), "mpv.sock")
