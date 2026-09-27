@@ -89,6 +89,10 @@ func (m *Monitor) run(ctx context.Context) {
 		case <-m.stopCh:
 			m.handleStop(ctx, &state)
 			return
+		case <-m.client.Done():
+			// mpv is gone; end now rather than wait for a Stop that may never come.
+			m.handleStop(ctx, &state)
+			return
 		case <-poll:
 			m.poll(ctx)
 		case <-m.wake:

@@ -201,3 +201,26 @@ func TestIPCClient_ObservePropertyReportsRejection(t *testing.T) {
 	defer cancel()
 	require.Error(t, client.ObserveProperty(ctx, "time-pos"))
 }
+
+func TestIPCClient_DoneClosesWhenMpvHangsUp(t *testing.T) {
+	fake := startFakeMPV(t, nil)
+	client := dialFake(t, fake)
+
+	// A round trip guarantees the fake has accepted the connection.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, _ = client.GetFloatProperty(ctx, "time-pos")
+
+	select {
+	case <-client.Done():
+		t.Fatal("Done closed before mpv hung up")
+	default:
+	}
+
+	fake.Hangup()
+	select {
+	case <-client.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("Done did not close after mpv hung up")
+	}
+}

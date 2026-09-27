@@ -234,3 +234,8 @@ func (c *IPCClient) Close() error {
 	})
 	return nil
 }
+
+// Done is closed once the connection to mpv is gone, whoever closed it.
+func (c *IPCClient) Done() <-chan struct{} {
+	return c.closed
+}

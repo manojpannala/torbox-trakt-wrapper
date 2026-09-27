@@ -2,6 +2,8 @@ package player_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -416,4 +418,51 @@ func TestMonitor_HangupThenStopSendsLastKnownPercent(t *testing.T) {
 	last := calls[len(calls)-1]
 	assert.Equal(t, "stop", last.kind)
 	assert.InDelta(t, 65.0, last.progress, 0.001)
+}
+
+func TestMonitor_EndsWhenMpvHangsUpWithoutStop(t *testing.T) {
+	fake := startFakeMPV(t, playingProps())
+	rec := &recordingScrobbler{}
+	sock := filepath.Join(t.TempDir(), "mpv.sock")
+	require.NoError(t, os.WriteFile(sock, nil, 0o600))
+	media := matcher.ParsedMedia{CleanTitle: "Test Movie Alpha", Year: 2023, Type: matcher.MediaTypeMovie}
+	mon := player.NewMonitor(dialFake(t, fake), media, rec, sock, nil)
+	mon.Start(context.Background())
+	t.Cleanup(mon.Stop)
+
+	rec.waitForCalls(t, 1)
+	fake.Set("percent-pos", 42.0)
+	require.Eventually(t, func() bool { return mon.GetLastProgress() == 42.0 }, 2*time.Second, 10*time.Millisecond)
+
+	// No mon.Stop here: the monitor must notice mpv is gone by itself.
+	fake.Hangup()
+	rec.waitForCalls(t, 2)
+
+	assert.Equal(t, []string{"start", "stop"}, rec.kinds())
+	assert.InDelta(t, 42.0, rec.snapshot()[1].progress, 0.001)
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(sock)
+		return os.IsNotExist(err)
+	}, 2*time.Second, 10*time.Millisecond, "the monitor cleans up the socket when it ends")
+}
+
+func TestMonitor_StartedOnAClosedClientEndsWithoutScrobbling(t *testing.T) {
+	fake := startFakeMPV(t, playingProps())
+	rec := &recordingScrobbler{}
+	sock := filepath.Join(t.TempDir(), "mpv.sock")
+	require.NoError(t, os.WriteFile(sock, nil, 0o600))
+	client := dialFake(t, fake)
+	require.NoError(t, client.Close())
+
+	media := matcher.ParsedMedia{CleanTitle: "Test Movie Alpha", Year: 2023, Type: matcher.MediaTypeMovie}
+	mon := player.NewMonitor(client, media, rec, sock, nil)
+	mon.Start(context.Background())
+	t.Cleanup(mon.Stop)
+
+	// No mon.Stop here either: this is mpv exiting before the monitor started.
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(sock)
+		return os.IsNotExist(err)
+	}, 3*time.Second, 10*time.Millisecond, "the monitor ends by itself")
+	assert.Empty(t, rec.snapshot(), "nothing was playing, so nothing is sent")
 }
