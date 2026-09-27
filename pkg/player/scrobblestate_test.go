@@ -52,6 +52,10 @@ func TestScrobbleState_Rules(t *testing.T) {
 			{0, snapshot{}, scrobbleNone, 0},
 			{time.Second, playingAt(5), scrobbleStart, 0},
 		}},
+		{"no start before percent-pos arrives", []ruleStep{
+			{0, snapshot{timePos: 10}, scrobbleNone, 0},
+			{time.Second, snapshot{timePos: 10, percentPos: 5}, scrobbleStart, 0},
+		}},
 		{"opened paused then unpaused starts once", []ruleStep{
 			{0, pausedAt(5), scrobbleNone, 0},
 			{2 * time.Second, playingAt(5), scrobbleStart, 0},
@@ -87,6 +91,11 @@ func TestScrobbleState_Rules(t *testing.T) {
 			{0, snapshot{restarts: 1}, scrobbleNone, 0},
 			{time.Second, snapshot{timePos: 3, percentPos: 1, restarts: 1}, scrobbleStart, 0},
 			{5 * time.Second, snapshot{timePos: 7, percentPos: 3, restarts: 1}, scrobbleNone, 0},
+		}},
+		{"a pause and resume inside the spacing window collapse to nothing", []ruleStep{
+			{0, playingAt(5), scrobbleStart, 0},
+			{400 * ms, pausedAt(5), scrobblePause, 600 * ms},
+			{time.Second, playingAt(5), scrobbleNone, 0},
 		}},
 	}
 	for _, tt := range tests {

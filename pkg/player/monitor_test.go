@@ -185,13 +185,31 @@ func playingProps() map[string]any {
 	return map[string]any{"time-pos": 10.0, "percent-pos": 5.0, "pause": false, "duration": 200.0}
 }
 
-func startEventMonitor(t *testing.T, fake *fakeMPV, rec *recordingScrobbler) *player.Monitor {
+func startEventMonitor(t *testing.T, fake *fakeMPV, scrobbler player.ScrobbleHandler) *player.Monitor {
 	t.Helper()
 	media := matcher.ParsedMedia{CleanTitle: "Test Movie Alpha", Year: 2023, Type: matcher.MediaTypeMovie}
-	mon := player.NewMonitor(dialFake(t, fake), media, rec, "", nil)
+	mon := player.NewMonitor(dialFake(t, fake), media, scrobbler, "", nil)
 	mon.Start(context.Background())
 	t.Cleanup(mon.Stop)
 	return mon
+}
+
+// blockingStartScrobbler's Start blocks until its ctx is done, to exercise
+// Stop superseding a call in flight.
+type blockingStartScrobbler struct {
+	recordingScrobbler
+	started chan struct{}
+}
+
+func newBlockingStartScrobbler() *blockingStartScrobbler {
+	return &blockingStartScrobbler{started: make(chan struct{})}
+}
+
+func (b *blockingStartScrobbler) Start(ctx context.Context, _ matcher.ParsedMedia, progress float64) error {
+	close(b.started)
+	<-ctx.Done()
+	b.record("start", progress)
+	return ctx.Err()
 }
 
 func TestMonitor_PauseAndResumeInsideOneSecondBothReachTrakt(t *testing.T) {
@@ -200,7 +218,7 @@ func TestMonitor_PauseAndResumeInsideOneSecondBothReachTrakt(t *testing.T) {
 	mon := startEventMonitor(t, fake, rec)
 
 	rec.waitForCalls(t, 1)
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(1300 * time.Millisecond)
 	fake.Set("pause", true)
 	time.Sleep(300 * time.Millisecond)
 	fake.Set("pause", false)
@@ -263,7 +281,7 @@ func TestMonitor_SeekWhilePlayingResendsStart(t *testing.T) {
 	startEventMonitor(t, fake, rec)
 
 	rec.waitForCalls(t, 1)
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(1300 * time.Millisecond)
 	fake.Set("percent-pos", 40.0)
 	fake.Emit("playback-restart")
 	rec.waitForCalls(t, 2)
@@ -302,4 +320,76 @@ func TestMonitor_FallsBackToPollingWhenObserveIsRejected(t *testing.T) {
 
 	assert.Equal(t, []string{"start", "stop"}, rec.kinds())
 	assert.Positive(t, fake.Gets(), "fallback reads properties")
+}
+
+func TestMonitor_StopCancelsAnInFlightScrobbleCall(t *testing.T) {
+	fake := startFakeMPV(t, playingProps())
+	scrobbler := newBlockingStartScrobbler()
+	mon := startEventMonitor(t, fake, scrobbler)
+
+	select {
+	case <-scrobbler.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start was never called")
+	}
+
+	stopped := make(chan time.Duration, 1)
+	go func() {
+		start := time.Now()
+		mon.Stop()
+		stopped <- time.Since(start)
+	}()
+
+	select {
+	case elapsed := <-stopped:
+		assert.Less(t, elapsed, 3*time.Second, "Stop must not wait out the blocked call")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return")
+	}
+
+	assert.Equal(t, []string{"start", "stop"}, scrobbler.kinds())
+}
+
+func TestMonitor_ContextCancelSendsFinalStopThenStopReturnsPromptly(t *testing.T) {
+	fake := startFakeMPV(t, playingProps())
+	rec := &recordingScrobbler{}
+	media := matcher.ParsedMedia{CleanTitle: "Test Movie Alpha", Year: 2023, Type: matcher.MediaTypeMovie}
+	mon := player.NewMonitor(dialFake(t, fake), media, rec, "", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	mon.Start(ctx)
+	t.Cleanup(mon.Stop)
+
+	rec.waitForCalls(t, 1)
+	fake.Set("percent-pos", 77.0)
+	require.Eventually(t, func() bool { return mon.GetLastProgress() == 77.0 }, 2*time.Second, 10*time.Millisecond)
+	cancel()
+	rec.waitForCalls(t, 2)
+
+	calls := rec.snapshot()
+	last := calls[len(calls)-1]
+	assert.Equal(t, "stop", last.kind)
+	assert.InDelta(t, 77.0, last.progress, 0.001)
+
+	start := time.Now()
+	mon.Stop()
+	assert.Less(t, time.Since(start), 3*time.Second, "Stop after a natural shutdown must return promptly")
+}
+
+func TestMonitor_HangupThenStopSendsLastKnownPercent(t *testing.T) {
+	fake := startFakeMPV(t, playingProps())
+	rec := &recordingScrobbler{}
+	mon := startEventMonitor(t, fake, rec)
+
+	rec.waitForCalls(t, 1)
+	fake.Set("percent-pos", 65.0)
+	require.Eventually(t, func() bool { return mon.GetLastProgress() == 65.0 },
+		time.Second, 5*time.Millisecond, "snapshot should observe the last real percent")
+
+	fake.Hangup()
+	mon.Stop()
+
+	calls := rec.snapshot()
+	last := calls[len(calls)-1]
+	assert.Equal(t, "stop", last.kind)
+	assert.InDelta(t, 65.0, last.progress, 0.001)
 }

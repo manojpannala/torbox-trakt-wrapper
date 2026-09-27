@@ -14,6 +14,10 @@ import (
 
 var observedProperties = []string{"time-pos", "percent-pos", "pause", "duration"}
 
+// scrobbleCallTimeout bounds every Trakt call the monitor makes, including the
+// final Stop, so none of them can hold up shutdown indefinitely.
+const scrobbleCallTimeout = 10 * time.Second
+
 type Monitor struct {
 	client       *IPCClient
 	media        matcher.ParsedMedia
@@ -29,6 +33,7 @@ type Monitor struct {
 	snap       snapshot
 	onProgress func(PlaybackProgress)
 	logger     *slog.Logger
+	cancel     context.CancelFunc
 }
 
 func NewMonitor(client *IPCClient, media matcher.ParsedMedia, scrobbler ScrobbleHandler, socketPath string, logger *slog.Logger) *Monitor {
@@ -53,6 +58,11 @@ func (m *Monitor) SetProgressCallback(cb func(PlaybackProgress)) {
 }
 
 func (m *Monitor) Start(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	m.mu.Lock()
+	m.cancel = cancel
+	m.mu.Unlock()
+
 	m.wg.Add(1)
 	go m.run(ctx)
 }
@@ -101,6 +111,9 @@ func (m *Monitor) run(ctx context.Context) {
 			if due == nil {
 				due = time.After(wait)
 			}
+		case ctx.Err() != nil:
+			// Stop is already signalled; let the top select take that path
+			// instead of sending a call that would only need cancelling.
 		default:
 			m.send(ctx, action, snap.percentPos)
 			state.sent(action, snap, time.Now())
@@ -202,12 +215,14 @@ func (m *Monitor) send(ctx context.Context, action scrobbleAction, percent float
 	if m.scrobbler == nil {
 		return
 	}
+	callCtx, cancel := context.WithTimeout(ctx, scrobbleCallTimeout)
+	defer cancel()
 	switch action {
 	case scrobbleStart:
-		err := m.scrobbler.Start(ctx, m.media, percent)
+		err := m.scrobbler.Start(callCtx, m.media, percent)
 		m.logger.Debug("scrobble start", "title", m.media.CleanTitle, "percent", percent, "err", err)
 	case scrobblePause:
-		err := m.scrobbler.Pause(ctx, m.media, percent)
+		err := m.scrobbler.Pause(callCtx, m.media, percent)
 		m.logger.Debug("scrobble pause", "title", m.media.CleanTitle, "percent", percent, "err", err)
 	case scrobbleNone:
 	}
@@ -218,7 +233,7 @@ func (m *Monitor) handleStop(ctx context.Context, state *scrobbleState) {
 	if started && m.scrobbler != nil {
 		time.Sleep(wait)
 		snap, _ := m.current()
-		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), scrobbleCallTimeout)
 		_, err := m.scrobbler.Stop(stopCtx, m.media, snap.percentPos)
 		cancel()
 		m.logger.Debug("scrobble stop", "title", m.media.CleanTitle, "percent", snap.percentPos, "err", err)
@@ -234,6 +249,13 @@ func (m *Monitor) handleStop(ctx context.Context, state *scrobbleState) {
 
 func (m *Monitor) Stop() {
 	m.stopOnce.Do(func() {
+		// Cancel first so run never starts a call once Stop has begun.
+		m.mu.Lock()
+		cancel := m.cancel
+		m.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
 		close(m.stopCh)
 	})
 	m.wg.Wait()

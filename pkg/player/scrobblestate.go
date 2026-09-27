@@ -49,7 +49,9 @@ func (s *scrobbleState) next(snap snapshot, now time.Time) (scrobbleAction, time
 func (s *scrobbleState) due(snap snapshot) scrobbleAction {
 	switch s.told {
 	case toldNothing:
-		if !snap.paused && snap.timePos > 0 {
+		// percent-pos arrives as its own event after time-pos; waiting for it
+		// keeps a resumed file from starting at 0%.
+		if !snap.paused && snap.timePos > 0 && snap.percentPos > 0 {
 			return scrobbleStart
 		}
 	case toldPlaying:

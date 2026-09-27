@@ -158,6 +158,17 @@ func (f *fakeMPV) Emit(event string) {
 	f.writeLocked(map[string]any{"event": event})
 }
 
+// Hangup closes the server side of the connection, as mpv exiting does,
+// without shutting down the listener.
+func (f *fakeMPV) Hangup() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.conn != nil {
+		_ = f.conn.Close()
+		f.conn = nil
+	}
+}
+
 func (f *fakeMPV) Requests() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
