@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/player"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/stream"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
@@ -32,6 +34,7 @@ type AppModel struct {
 	traktClient    *trakt.Client
 	matcher        *matcher.Matcher
 	player         player.Player
+	logger         *slog.Logger
 	theme          Theme
 	store          *cache.Store
 	cachedAt       [3]time.Time
@@ -175,6 +178,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		traktClient:    trClient,
 		matcher:        matcherEngine,
 		player:         mpvPlayer,
+		logger:         logger,
 		theme:          theme,
 		store:          settings.store,
 		inFlight:       inFlight,
@@ -1090,18 +1094,8 @@ func (m AppModel) streamItemCmd(item *LibraryItem, resumePercent float64) tea.Cm
 			fileID = item.TorrentFiles[0].ID
 		}
 
-		var link string
-		var err error
-
-		switch item.Category {
-		case TabTorrents:
-			link, err = m.torboxClient.RequestDownloadLink(ctx, item.ID, fileID, false)
-		case TabUsenet:
-			link, err = m.torboxClient.RequestUsenetDownloadLink(ctx, item.ID, fileID, false)
-		case TabWebDL:
-			link, err = m.torboxClient.RequestWebDLDownloadLink(ctx, item.ID, fileID, false)
-		}
-
+		fetch := m.linkFetcher(item.Category, item.ID, fileID)
+		link, err := fetch(ctx)
 		if err != nil {
 			return StatusMsg{Text: fmt.Sprintf("Failed to resolve stream link: %v", err), IsErr: true}
 		}
@@ -1111,6 +1105,7 @@ func (m AppModel) streamItemCmd(item *LibraryItem, resumePercent float64) tea.Cm
 			Title:           item.CleanTitle,
 			Parsed:          item.Parsed,
 			ResumeAtPercent: resumePercent,
+			Renew:           fetch,
 		}
 	}
 }
@@ -1148,18 +1143,8 @@ func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, p
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		var link string
-		var err error
-
-		switch parent.Category {
-		case TabTorrents:
-			link, err = m.torboxClient.RequestDownloadLink(ctx, parent.ID, fileID, false)
-		case TabUsenet:
-			link, err = m.torboxClient.RequestUsenetDownloadLink(ctx, parent.ID, fileID, false)
-		case TabWebDL:
-			link, err = m.torboxClient.RequestWebDLDownloadLink(ctx, parent.ID, fileID, false)
-		}
-
+		fetch := m.linkFetcher(parent.Category, parent.ID, fileID)
+		link, err := fetch(ctx)
 		if err != nil {
 			return StatusMsg{Text: fmt.Sprintf("Failed to resolve stream link: %v", err), IsErr: true}
 		}
@@ -1169,7 +1154,23 @@ func (m AppModel) streamFileCmd(parent *LibraryItem, fileID int, title string, p
 			Title:           title,
 			Parsed:          parsed,
 			ResumeAtPercent: resumePercent,
+			Renew:           fetch,
 		}
+	}
+}
+
+// linkFetcher asks TorBox for a download link to one file. The same function
+// fetches the first link and, through the stream proxy, any renewed one.
+func (m AppModel) linkFetcher(category TabType, id, fileID int) stream.Renewer {
+	client := m.torboxClient
+	return func(ctx context.Context) (string, error) {
+		switch category {
+		case TabUsenet:
+			return client.RequestUsenetDownloadLink(ctx, id, fileID, false)
+		case TabWebDL:
+			return client.RequestWebDLDownloadLink(ctx, id, fileID, false)
+		}
+		return client.RequestDownloadLink(ctx, id, fileID, false)
 	}
 }
 
@@ -1289,6 +1290,8 @@ type playerExec struct {
 	player player.Player
 	media  player.MediaStream
 	tail   *outputTail
+	renew  stream.Renewer
+	logger *slog.Logger
 }
 
 func (e *playerExec) SetStdin(r io.Reader) {
@@ -1304,11 +1307,26 @@ func (e *playerExec) SetStderr(w io.Writer) {
 }
 
 func (e *playerExec) Run() error {
+	var proxy *stream.Proxy
+	if e.renew != nil {
+		var err error
+		proxy, err = stream.Start(e.media.URL, e.renew, stream.WithLogger(e.logger))
+		if err != nil {
+			return err
+		}
+		defer func() { _ = proxy.Close() }()
+		e.media.URL = proxy.URL()
+	}
+
 	session, err := e.player.Play(e.ctx, e.media)
 	if err != nil {
 		return err
 	}
-	return session.Wait()
+	err = session.Wait()
+	if proxy != nil && proxy.RenewFailed() {
+		return stream.ErrRenewFailed
+	}
+	return err
 }
 
 func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
@@ -1323,11 +1341,16 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 		}
 	}
 
-	tail := &outputTail{}
+	e := m.newPlayerExec(msg)
+	return tea.Exec(e, playbackFinished(exe, e.tail))
+}
+
+func (m AppModel) newPlayerExec(msg StreamURLResolvedMsg) *playerExec {
 	e := &playerExec{
 		ctx:    m.ctx,
 		player: m.player,
-		tail:   tail,
+		tail:   &outputTail{},
+		logger: m.logger,
 		media: player.MediaStream{
 			URL:             msg.URL,
 			Title:           msg.Title,
@@ -1335,8 +1358,17 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 			ResumeAtPercent: msg.ResumeAtPercent,
 		},
 	}
+	if m.cfg.Player.StreamProxy {
+		e.renew = msg.Renew
+	}
+	return e
+}
 
-	return tea.Exec(e, func(err error) tea.Msg {
+func playbackFinished(exe string, tail *outputTail) func(error) tea.Msg {
+	return func(err error) tea.Msg {
+		if errors.Is(err, stream.ErrRenewFailed) {
+			return PlaybackFinishedMsg{Text: "Stream link expired and couldn't be renewed", IsErr: true}
+		}
 		if err != nil {
 			if detail := tail.errorLine(); detail != "" {
 				return PlaybackFinishedMsg{Text: fmt.Sprintf("%s failed: %s", exe, detail), IsErr: true}
@@ -1344,7 +1376,7 @@ func (m AppModel) launchPlayerCmd(msg StreamURLResolvedMsg) tea.Cmd {
 			return PlaybackFinishedMsg{Text: fmt.Sprintf("%s playback ended with error: %v", exe, err), IsErr: true}
 		}
 		return PlaybackFinishedMsg{Text: "Playback finished", IsErr: false}
-	})
+	}
 }
 
 func (m AppModel) deleteItemCmd(item LibraryItem) tea.Cmd {

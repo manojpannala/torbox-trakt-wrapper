@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/stream"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
@@ -114,6 +115,8 @@ type StreamURLResolvedMsg struct {
 	Title           string
 	Parsed          matcher.ParsedMedia
 	ResumeAtPercent float64
+	// Renew asks TorBox for a fresh link to the same file.
+	Renew stream.Renewer
 }
 
 type DeviceCodeGeneratedMsg struct {

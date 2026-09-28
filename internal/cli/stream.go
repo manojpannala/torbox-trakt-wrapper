@@ -11,6 +11,7 @@ import (
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/player"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/stream"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
 )
@@ -87,7 +88,10 @@ var streamCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Resolving stream URL for: %s (ID: %d)...\n", parsed.DisplayTitle(), matchedTorrent.ID)
-		streamLink, err := tbClient.RequestDownloadLink(ctx, matchedTorrent.ID, fileID, false)
+		fetchLink := func(ctx context.Context) (string, error) {
+			return tbClient.RequestDownloadLink(ctx, matchedTorrent.ID, fileID, false)
+		}
+		streamLink, err := fetchLink(ctx)
 		if err != nil {
 			return fmt.Errorf("resolving stream URL: %w", err)
 		}
@@ -114,12 +118,26 @@ var streamCmd = &cobra.Command{
 			Parsed: parsed,
 		}
 
+		var proxy *stream.Proxy
+		if c.Player.StreamProxy {
+			proxy, err = stream.Start(streamLink, fetchLink, stream.WithLogger(logger))
+			if err != nil {
+				return fmt.Errorf("starting stream proxy: %w", err)
+			}
+			defer func() { _ = proxy.Close() }()
+			streamMedia.URL = proxy.URL()
+		}
+
 		session, err := mpv.Play(context.Background(), streamMedia)
 		if err != nil {
 			return fmt.Errorf("launching player: %w", err)
 		}
 
-		return session.Wait()
+		err = session.Wait()
+		if proxy != nil && proxy.RenewFailed() {
+			return stream.ErrRenewFailed
+		}
+		return err
 	},
 }
 
