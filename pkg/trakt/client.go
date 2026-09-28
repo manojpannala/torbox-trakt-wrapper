@@ -238,7 +238,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	if requiresAuth && c.IsTokenExpired() && c.tokens.RefreshToken != "" {
 		if err := c.refreshTokenInternal(ctx); err != nil {
 			// If proactive refresh fails, we will still attempt the request or return error
-			_ = err
+			c.logger.Warn("trakt token refresh failed", "err", logging.Redact(err.Error()))
 		}
 	}
 
@@ -305,6 +305,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 			if err != nil {
 				return err
 			}
+		} else {
+			c.logger.Warn("trakt token refresh failed", "err", logging.Redact(refreshErr.Error()))
 		}
 	}
 

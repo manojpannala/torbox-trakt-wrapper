@@ -42,6 +42,7 @@ type AppModel struct {
 	traktGen       uint64
 	traktSettled   bool
 	traktFailed    bool
+	traktErr       fetchErrKind
 	heldLaunch     *heldLaunch
 	deleteTarget   *LibraryItem
 
@@ -324,6 +325,7 @@ func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.traktSettled = true
 		m.traktFailed = true
+		m.traktErr = classifyFetchErr(msg.Err)
 		cmd := m.releaseHeldLaunch()
 		return m, cmd
 
@@ -351,6 +353,7 @@ func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.recalculateBadges()
 		m.reapplyFilter()
 		m.traktSettled = false
+		m.traktFailed = false
 		cmds = append(cmds, m.refetchTrakt())
 		return m, tea.Batch(cmds...)
 
@@ -859,13 +862,27 @@ func altScreenView(content string) tea.View {
 	return v
 }
 
+// traktBadge says whether Trakt is usable, and when it isn't, whether the fix
+// is signing in again (press A) or waiting for the network.
+func (m AppModel) traktBadge() string {
+	style := lipgloss.NewStyle()
+	switch {
+	case !m.cfg.Trakt.HasAuth():
+		return style.Foreground(ColorPeach).Render("Trakt: [Not Paired]")
+	case m.traktFailed && m.traktErr == fetchErrAuthRejected:
+		return style.Foreground(ColorRed).Render("Trakt: [Sign-in expired — press A]")
+	case m.traktFailed && m.traktErr == fetchErrOffline:
+		return style.Foreground(ColorYellow).Render("Trakt: [Offline]")
+	case m.traktFailed:
+		return style.Foreground(ColorYellow).Render("Trakt: [Unavailable]")
+	}
+	return style.Foreground(ColorGreen).Render("Trakt: [Connected ✓]")
+}
+
 func (m AppModel) renderHeader() string {
 	title := m.theme.AppTitle.Render("TORBOX TRAKT WRAPPER")
 
-	authBadge := lipgloss.NewStyle().Foreground(ColorPeach).Render("Trakt: [Not Paired]")
-	if m.cfg.Trakt.HasAuth() {
-		authBadge = lipgloss.NewStyle().Foreground(ColorGreen).Render("Trakt: [Connected ✓]")
-	}
+	authBadge := m.traktBadge()
 
 	spinnerView := ""
 	if m.loading {

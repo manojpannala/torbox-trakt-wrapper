@@ -1,7 +1,9 @@
 package trakt_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -243,4 +245,37 @@ func TestClient_ErrorFormatting(t *testing.T) {
 	assert.Equal(t, "trakt api error (status 503)", err3.Error())
 
 	assert.True(t, trakt.IsUnauthorized(trakt.ErrUnauthorized))
+}
+
+func TestClient_LogsARejectedTokenRefresh(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/oauth/token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	var logs bytes.Buffer
+	client := trakt.NewClient("cid", "csecret",
+		trakt.WithBaseURL(server.URL),
+		trakt.WithLogger(slog.New(slog.NewTextHandler(&logs, nil))),
+		trakt.WithTokens(trakt.TokenResponse{
+			AccessToken:  "revoked-access-token",
+			RefreshToken: "revoked-refresh-token",
+			ExpiresIn:    3600,
+			CreatedAt:    100, // Long expired, so the refresh is tried first
+		}),
+	)
+
+	_, err := client.GetWatchedMovies(context.Background())
+
+	require.True(t, trakt.IsUnauthorized(err))
+	assert.Contains(t, logs.String(), "trakt token refresh failed")
+	assert.Contains(t, logs.String(), "status 401")
+	assert.NotContains(t, logs.String(), "revoked-refresh-token")
+	assert.NotContains(t, logs.String(), "revoked-access-token")
 }
