@@ -289,6 +289,12 @@ func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loading = false
 		m.inFlight &^= tabBit(msg.Tab)
+		kind := classifyFetchErr(msg.Err)
+		if kind == fetchErrAuthRejected {
+			m.statusText = torboxKeyRejectedStatus
+			m.isStatusErr = true
+			return m, nil
+		}
 		if !m.cachedAt[msg.Tab].IsZero() {
 			m.fetchFailed |= tabBit(msg.Tab)
 			if m.statusText == refreshingStatus {
@@ -304,7 +310,11 @@ func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case TabWebDL:
 			noun = "webdl"
 		}
-		m.statusText = fmt.Sprintf("Failed to load %s: %v", noun, msg.Err)
+		if kind == fetchErrOffline {
+			m.statusText = fmt.Sprintf("Offline — couldn't load %s", noun)
+		} else {
+			m.statusText = fmt.Sprintf("Failed to load %s: %v", noun, msg.Err)
+		}
 		m.isStatusErr = true
 		return m, nil
 
