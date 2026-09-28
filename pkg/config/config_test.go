@@ -317,3 +317,25 @@ func TestPersistTraktTokens_FileModeAndNoLeftoverTempFile(t *testing.T) {
 		assert.NotContains(t, e.Name(), ".tmp", "no leftover temp file after PersistTraktTokens")
 	}
 }
+
+func TestStreamProxy_OnByDefault(t *testing.T) {
+	assert.True(t, DefaultConfig().Player.StreamProxy)
+}
+
+func TestStreamProxy_ConfigWrittenBeforeTheSettingExistedKeepsItOn(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte("[player]\ncommand = \"mpv\"\n"), 0o600))
+
+	cfg, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	assert.True(t, cfg.Player.StreamProxy)
+}
+
+func TestStreamProxy_CanBeTurnedOff(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte("[player]\nstream_proxy = false\n"), 0o600))
+
+	cfg, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	assert.False(t, cfg.Player.StreamProxy)
+}

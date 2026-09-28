@@ -189,6 +189,7 @@ args = [
 enable_ipc = true
 scrobble_threshold_percent = 90
 keep_open = "" # "" leaves mpv.conf alone | "yes" | "no" | "always"
+stream_proxy = true # renew an expired TorBox link mid-stream; false hands mpv the link directly
 
 [ui]
 theme = "catppuccin-mocha"
