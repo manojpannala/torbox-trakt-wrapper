@@ -4,8 +4,6 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
-                                                                                                                        
                                ╭────────────────────────────────────────────────────────╮                               
                                │                                                        │                               
                                │  Keyboard Shortcuts                                    │                               
@@ -16,9 +14,13 @@
                                │  Tab / 1,2,3     Switch tabs (Torrents / Usenet /      │                               
                                │  Web-DL)                                               │                               
                                │  f / o           Open file tree / folder browser       │                               
-                               │  /               Search / filter library list          │                               
-                               │  Esc             Clear search / close modal / back     │                               
+                               │  /               Filter the library list               │                               
+                               │  Esc             Clear filter / close modal / back     │                               
                                │  a               Add new torrent (Magnet / URL)        │                               
+                               │  s               Search Prowlarr for releases          │                               
+                               │  S               Find other releases of this title     │                               
+                               │  Ctrl+R (search) Search the words as typed             │                               
+                               │  O (search)      Change the release sort order         │                               
                                │  d / x           Delete selected item                  │                               
                                │  r               Refresh library and Trakt history     │                               
                                │  p               Pause / resume active torrent         │                               
@@ -30,8 +32,6 @@
                                │    Press Esc or ? to Close                             │                               
                                │                                                        │                               
                                ╰────────────────────────────────────────────────────────╯                               
-                                                                                                                        
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
