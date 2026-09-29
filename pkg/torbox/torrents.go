@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // GetTorrents retrieves user's torrents. If id is provided, retrieves only that torrent.
@@ -224,4 +225,53 @@ func (c *Client) ReannounceTorrent(ctx context.Context, id int) error {
 		TorrentID: id,
 		Operation: "reannounce",
 	})
+}
+
+// MaxCheckCached is how many hashes one CheckCached call may carry.
+const MaxCheckCached = 100
+
+// CheckCached reports, for each hash, whether TorBox already has it cached.
+// It makes exactly one attempt: a 429 comes back as an error whose
+// RetryAfter the caller uses to pace itself.
+func (c *Client) CheckCached(ctx context.Context, hashes []string) (map[string]bool, error) {
+	if len(hashes) == 0 {
+		return map[string]bool{}, nil
+	}
+	if len(hashes) > MaxCheckCached {
+		return nil, fmt.Errorf("checkcached takes at most %d hashes, got %d", MaxCheckCached, len(hashes))
+	}
+	payload, err := json.Marshal(map[string][]string{"hashes": hashes})
+	if err != nil {
+		return nil, fmt.Errorf("marshaling checkcached request: %w", err)
+	}
+
+	var envelope APIResponse[json.RawMessage]
+	path := "/torrents/checkcached?format=object&list_files=false"
+	if err := c.do(ctx, "POST", path, bytes.NewReader(payload), "", &envelope, 1); err != nil {
+		return nil, err
+	}
+	if !envelope.Success {
+		errMsg := envelope.Detail
+		if envelope.Error != nil {
+			errMsg = *envelope.Error + ": " + envelope.Detail
+		}
+		return nil, fmt.Errorf("torbox checkcached error: %s", errMsg)
+	}
+
+	cached := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		cached[strings.ToLower(h)] = false
+	}
+	// Only cached hashes appear; with none, data may be {}, [] or null.
+	raw := bytes.TrimSpace(envelope.Data)
+	if len(raw) > 0 && raw[0] == '{' {
+		var found map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &found); err != nil {
+			return nil, fmt.Errorf("decoding checkcached data: %w", err)
+		}
+		for h := range found {
+			cached[strings.ToLower(h)] = true
+		}
+	}
+	return cached, nil
 }

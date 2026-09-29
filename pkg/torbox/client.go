@@ -39,6 +39,8 @@ type APIError struct {
 	ErrorCode  string
 	Detail     string
 	Message    string
+	// RetryAfter is the server's Retry-After on a 429, or zero.
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
@@ -87,6 +89,15 @@ func IsRateLimited(err error) bool {
 	}
 	var apiErr *APIError
 	return errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusTooManyRequests || apiErr.ErrorCode == "RATE_LIMIT")
+}
+
+// RetryAfter returns the wait a 429 asked for, or zero if err carries none.
+func RetryAfter(err error) time.Duration {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.RetryAfter
+	}
+	return 0
 }
 
 // Option configures a TorBox Client.
@@ -216,6 +227,10 @@ func (c *Client) GetUser(ctx context.Context, settings bool) (*User, error) {
 }
 
 func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader, contentType string, target any) error {
+	return c.do(ctx, method, path, body, contentType, target, c.maxRetries+1)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body io.Reader, contentType string, target any, attempts int) error {
 	url := fmt.Sprintf("%s%s", c.baseURL, path)
 
 	var reqBodyBytes []byte
@@ -228,7 +243,6 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	}
 
 	var lastErr error
-	attempts := c.maxRetries + 1
 
 	for attempt := range attempts {
 		if attempt > 0 {
@@ -302,6 +316,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 			if resp.StatusCode == http.StatusTooManyRequests {
 				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
 					if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+						apiErr.RetryAfter = time.Duration(seconds) * time.Second
 						if attempt < attempts-1 {
 							select {
 							case <-ctx.Done():
@@ -345,7 +360,7 @@ func mapStatusToError(statusCode int, apiErr *APIError) error {
 	case http.StatusNotFound:
 		return fmt.Errorf("%w: %v", ErrNotFound, apiErr)
 	case http.StatusTooManyRequests:
-		return fmt.Errorf("%w: %v", ErrRateLimited, apiErr)
+		return fmt.Errorf("%w: %w", ErrRateLimited, apiErr)
 	default:
 		return apiErr
 	}
