@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/search"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/search/prowlarr"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
@@ -997,6 +998,7 @@ func (m AppModel) searchShortcuts() string {
 }
 
 func titleYear(title string, year int) string {
+	title = matcher.SanitizeDisplay(title)
 	if year > 0 {
 		return fmt.Sprintf("%s (%d)", title, year)
 	}

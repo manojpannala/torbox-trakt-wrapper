@@ -36,6 +36,10 @@ func searchServers(t *testing.T) (cfgPath string, checked *[]string) {
 		case "/search/imdb/tt0000001":
 			_, _ = w.Write([]byte(`[{"type":"movie","movie":{"title":"Sample Film","year":2014,"ids":{"trakt":1,"imdb":"tt0000001"}}}]`))
 		case "/search/movie,show":
+			if r.URL.Query().Get("query") == "control codes" {
+				_, _ = w.Write([]byte(`[{"type":"movie","movie":{"title":"Sample\u001b[2J Film\u009b","year":2014,"ids":{"trakt":3,"imdb":"tt0000003\u0007"}}}]`))
+				return
+			}
 			_, _ = w.Write([]byte(`[{"type":"movie","movie":{"title":"Sample Film","year":2014,"ids":{"trakt":1,"imdb":"tt0000001"}}},
 				{"type":"show","show":{"title":"Sample Film: The Series","year":2019,"ids":{"trakt":2,"imdb":"tt0000002"}}}]`))
 		default:
@@ -111,6 +115,17 @@ func TestCLI_Search_TitlesListTheirIMDbIDs(t *testing.T) {
 	assert.Regexp(t, `tt0000001\s+movie\s+Sample Film \(2014\)`, out)
 	assert.Regexp(t, `tt0000002\s+show\s+Sample Film: The Series \(2019\)`, out)
 	assert.Empty(t, *checked, "a title search asks TorBox nothing")
+}
+
+func TestCLI_Search_TitlesDropControlCharacters(t *testing.T) {
+	cfgPath, _ := searchServers(t)
+
+	out, err := executeCommand("--config", cfgPath, "search", "--raw=false", "--json=false", "--sort", "cached", "control", "codes")
+	require.NoError(t, err)
+	assert.Regexp(t, `tt0000003\s+movie\s+Sample\[2J Film \(2014\)`, out)
+	assert.NotContains(t, out, "\x1b")
+	assert.NotContains(t, out, "\x07")
+	assert.NotContains(t, out, "\u009b")
 }
 
 func TestCLI_Search_ReleasesCarryBadgesAndMagnets(t *testing.T) {

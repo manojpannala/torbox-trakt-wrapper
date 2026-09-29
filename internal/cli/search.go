@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/search"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/search/prowlarr"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
@@ -115,7 +116,7 @@ func (s cliSearch) titleHits(ctx context.Context, text string) error {
 	}
 	w := tabwriter.NewWriter(s.out, 0, 0, 2, ' ', 0)
 	for _, h := range hits {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", h.IDs.IMDB, h.Kind, titleYear(h.Title, h.Year))
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", matcher.SanitizeDisplay(h.IDs.IMDB), h.Kind, titleYear(h.Title, h.Year))
 	}
 	if err := w.Flush(); err != nil {
 		return err
@@ -371,6 +372,7 @@ func writeJSON(w io.Writer, v any) error {
 }
 
 func titleYear(title string, year int) string {
+	title = matcher.SanitizeDisplay(title)
 	if year > 0 {
 		return fmt.Sprintf("%s (%d)", title, year)
 	}

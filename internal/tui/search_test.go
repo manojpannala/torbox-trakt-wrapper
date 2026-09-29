@@ -278,6 +278,28 @@ func TestSearch_TitleThenReleasesWithBadges(t *testing.T) {
 	assert.ElementsMatch(t, []string{tuiHashA, tuiHashB}, fc.batches[0])
 }
 
+func TestSearch_TraktTitlesDropControlCharacters(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m.titles = fakeTitles{hits: []trakt.TitleHit{
+		{Kind: "show", Title: "Sample\x1b[2J Show\a\u009b", Year: 2019, IDs: trakt.IDs{Trakt: 3, IMDB: "tt0000003"}},
+	}}
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "sample show")
+	m = hit(t, m, enterKey)
+	require.Equal(t, stageTitles, m.sv.stage)
+	assert.Contains(t, plain(m), "show  Sample[2J Show (2019)")
+	for _, bad := range []string{"\x1b[2J", "\a", "\u009b"} {
+		assert.NotContains(t, viewText(m), bad)
+	}
+
+	m = hit(t, m, enterKey)
+	require.Equal(t, stageEpisode, m.sv.stage)
+	assert.Contains(t, plain(m), "Season or episode of Sample[2J Show (2019)")
+	for _, bad := range []string{"\x1b[2J", "\a", "\u009b"} {
+		assert.NotContains(t, viewText(m), bad)
+	}
+}
+
 func TestSearch_ShowAsksForSeasonOrEpisode(t *testing.T) {
 	m, fs, _ := searchModel(t, nil)
 	m, _ = sendKey(m, sKey)
