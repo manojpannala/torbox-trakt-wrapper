@@ -2,8 +2,10 @@ package trakt_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,4 +81,67 @@ func TestSearchShows_ResolvesAShow(t *testing.T) {
 	show := shows[0]
 	assert.Equal(t, 1388, show.IDs.Trakt)
 	assert.Contains(t, *gotPath, "/search/show")
+}
+
+func TestSearchTitles_MixesMoviesAndShowsInTraktOrder(t *testing.T) {
+	body := `[
+	  {"type":"show","score":900,"show":{"title":"Sample Show","year":2008,"ids":{"trakt":2,"imdb":"tt0000002"}}},
+	  {"type":"movie","score":800,"movie":{"title":"Sample Film","year":2014,"ids":{"trakt":1,"imdb":"tt0000001"}}}]`
+	server, gotPath := searchServer(t, body)
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+
+	hits, err := client.SearchTitles(context.Background(), "sampel")
+
+	require.NoError(t, err)
+	require.Len(t, hits, 2)
+	assert.Equal(t, trakt.TitleHit{Kind: "show", Title: "Sample Show", Year: 2008, IDs: trakt.IDs{Trakt: 2, IMDB: "tt0000002"}}, hits[0])
+	assert.Equal(t, "movie", hits[1].Kind)
+	assert.Equal(t, "tt0000001", hits[1].IDs.IMDB)
+	assert.Contains(t, *gotPath, "/search/movie,show?")
+	assert.Contains(t, *gotPath, "query=sampel")
+	assert.NotContains(t, *gotPath, "years=")
+}
+
+func TestSearchTitles_KeepsAtMostTenHits(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("[")
+	for i := range 15 {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `{"type":"movie","movie":{"title":"Film %d","year":2000,"ids":{"trakt":%d}}}`, i, i+1)
+	}
+	b.WriteString("]")
+	server, _ := searchServer(t, b.String())
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+
+	hits, err := client.SearchTitles(context.Background(), "film")
+
+	require.NoError(t, err)
+	assert.Len(t, hits, trakt.MaxTitleHits)
+	assert.Equal(t, "Film 0", hits[0].Title)
+}
+
+func TestLookupIMDb_ReturnsTheWorkTheIDBelongsTo(t *testing.T) {
+	body := `[{"type":"show","score":1,"show":{"title":"Sample Show","year":2008,"ids":{"trakt":2,"imdb":"tt0000002"}}}]`
+	server, gotPath := searchServer(t, body)
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+
+	hit, err := client.LookupIMDb(context.Background(), "tt0000002")
+
+	require.NoError(t, err)
+	require.NotNil(t, hit)
+	assert.Equal(t, "show", hit.Kind)
+	assert.Equal(t, "Sample Show", hit.Title)
+	assert.Equal(t, "/search/imdb/tt0000002?type=movie,show", *gotPath)
+}
+
+func TestLookupIMDb_NilWhenTraktHasNoMatch(t *testing.T) {
+	server, _ := searchServer(t, `[]`)
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+
+	hit, err := client.LookupIMDb(context.Background(), "tt9999999")
+
+	require.NoError(t, err)
+	assert.Nil(t, hit)
 }
