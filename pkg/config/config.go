@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -139,6 +140,20 @@ func MaskSecret(secret string) string {
 	return s[:3] + "..." + s[len(s)-3:]
 }
 
+// maskURL shows where a URL points, without the user info, query or
+// fragment, any of which may carry a credential.
+func maskURL(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "<empty>"
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return "<invalid>"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
+}
+
 func (c Config) String() string {
 	return fmt.Sprintf(
 		"TorBox[Category: %s, CacheTTL: %dm, Key: %s] | Trakt[Client: %s, Auth: %t, Expired: %t] | Player[%s, IPC: %t] | Search[URL: %s, Key: %s]",
@@ -150,7 +165,7 @@ func (c Config) String() string {
 		c.Trakt.IsTokenExpired(),
 		c.Player.Command,
 		c.Player.EnableIPC,
-		c.Search.ProwlarrURL,
+		maskURL(c.Search.ProwlarrURL),
 		MaskSecret(c.Search.ProwlarrAPIKey),
 	)
 }

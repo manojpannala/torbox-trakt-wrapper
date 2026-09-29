@@ -385,3 +385,19 @@ func TestSearch_StringerMasksTheProwlarrKey(t *testing.T) {
 	assert.NotContains(t, str, "prowlarr_secret_value")
 	assert.Contains(t, str, "pro...lue")
 }
+
+func TestSearch_StringerHidesCredentialsInTheProwlarrURL(t *testing.T) {
+	for raw, want := range map[string]string{ // #nosec G101 -- fake credentials the test checks are hidden
+		"https://user:url_secret@prowlarr.example/base?apikey=url_secret#frag": "URL: https://prowlarr.example/base,",
+		"http://127.0.0.1:9696": "URL: http://127.0.0.1:9696,",
+		"":                      "URL: <empty>,",
+		"://url_secret":         "URL: <invalid>,",
+	} {
+		cfg := DefaultConfig()
+		cfg.Search.ProwlarrURL = raw
+
+		str := cfg.String()
+		assert.NotContains(t, str, "url_secret", raw)
+		assert.Contains(t, str, want, raw)
+	}
+}
