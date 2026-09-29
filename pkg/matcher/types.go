@@ -70,6 +70,7 @@ type MatchResult struct {
 	TraktID         int                   `json:"trakt_id,omitempty"`
 	TraktTitle      string                `json:"trakt_title,omitempty"`
 	TraktYear       int                   `json:"trakt_year,omitempty"`
+	IMDbID          string                `json:"imdb_id,omitempty"`
 	MatchedMovie    *trakt.WatchedMovie   `json:"matched_movie,omitempty"`
 	MatchedShow     *trakt.WatchedShow    `json:"matched_show,omitempty"`
 	MatchedEpisode  *trakt.WatchedEpisode `json:"matched_episode,omitempty"`

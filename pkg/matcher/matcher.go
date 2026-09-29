@@ -192,6 +192,7 @@ func (m *Matcher) matchMovie(result *MatchResult, normTitle string, parsed Parse
 		result.TraktID = matchedMovie.Movie.IDs.Trakt
 		result.TraktTitle = matchedMovie.Movie.Title
 		result.TraktYear = matchedMovie.Movie.Year
+		result.IMDbID = matchedMovie.Movie.IDs.IMDB
 		result.MatchedMovie = matchedMovie
 	}
 
@@ -214,6 +215,7 @@ func (m *Matcher) matchMovie(result *MatchResult, normTitle string, parsed Parse
 			result.TraktID = pb.Movie.IDs.Trakt
 			result.TraktTitle = pb.Movie.Title
 			result.TraktYear = pb.Movie.Year
+			result.IMDbID = pb.Movie.IDs.IMDB
 		}
 	}
 }
@@ -228,6 +230,7 @@ func (m *Matcher) matchEpisode(result *MatchResult, normTitle string, parsed Par
 		result.TraktTitle = show.Show.Title
 		result.TraktYear = show.Show.Year
 		result.TraktID = show.Show.IDs.Trakt
+		result.IMDbID = show.Show.IDs.IMDB
 		result.MatchedShow = show
 
 		seasonNum := parsed.Season
@@ -262,6 +265,9 @@ func (m *Matcher) matchEpisode(result *MatchResult, normTitle string, parsed Par
 		result.ProgressPercent = pb.Progress
 		result.PlaybackID = pb.ID
 		result.PausedAt = pb.PausedAt
+		if result.IMDbID == "" && pb.Show != nil {
+			result.IMDbID = pb.Show.IDs.IMDB
+		}
 	}
 }
 
