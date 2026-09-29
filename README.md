@@ -24,7 +24,8 @@ A high-performance terminal client and TUI for browsing, streaming, and managing
   - Cleans release scene tags (`2160p`, `Remux`, `HEVC`, `DDP5.1`, `TrueHD`, `HDR`, `AV1`).
   - Right-to-left reverse year extraction, so titles that themselves contain or consist of a four-digit number still resolve to the correct release year.
   - Robust TV episode and season recognition (`S01E05`, `S01E01-E04`, `1x05`, anime flat notation).
-- **💻 Dual Interface**: Interactive Bubble Tea TUI or scriptable, headless CLI subcommands (`auth`, `list`, `add`, `stream`, `config`).
+- **🔎 Optional Release Search**: Search your own [Prowlarr](https://prowlarr.com) for a title's releases, see which are already cached on TorBox (`●` cached, `○` not cached, `■` in your library), and add one in a keypress.
+- **💻 Dual Interface**: Interactive Bubble Tea TUI or scriptable, headless CLI subcommands (`auth`, `list`, `add`, `stream`, `search`, `config`).
 - **🛡️ Privacy & Security**:
   - Zero plain-text token leaks in process arguments.
   - Isolated per-session IPC sockets with `0700` filesystem permissions.
@@ -79,6 +80,8 @@ make build
 | <kbd>/</kbd> | Focus instant fuzzy search / filter bar |
 | <kbd>Esc</kbd> | Clear search / close active modal / back to library |
 | <kbd>a</kbd> | Add new download (Magnet link / URL) |
+| <kbd>s</kbd> | Search Prowlarr for releases (see [Search](#-search-optional)) |
+| <kbd>S</kbd> | Search for other releases of the selected title |
 | <kbd>d</kbd> / <kbd>x</kbd> | Delete selected download confirmation |
 | <kbd>p</kbd> | Pause / resume the selected download |
 | <kbd>r</kbd> | Refresh library list and Trakt watch history |
@@ -89,6 +92,45 @@ make build
 Playing something Trakt has a partial position for opens a resume prompt first:
 <kbd>r</kbd> resumes, <kbd>s</kbd> starts over, <kbd>Esc</kbd> cancels. Inside
 that prompt <kbd>r</kbd> means resume, not refresh.
+
+---
+
+## 🔎 Search (optional)
+
+Search is off until you point it at a [Prowlarr](https://prowlarr.com) you run
+yourself. The wrapper ships no indexers of its own: it asks Prowlarr, and only
+the torrent indexers you have enabled there.
+
+```toml
+[search]
+prowlarr_url = "http://127.0.0.1:9696"
+prowlarr_api_key = "your_prowlarr_api_key" # Prowlarr → Settings → General → API Key
+```
+
+`prowlarr_url` may use `http` only for a Prowlarr on this machine
+(`localhost`, `127.0.0.1`, `::1`); anything else must use `https`. The key
+can also come from `PROWLARR_API_KEY`.
+
+In the TUI, press <kbd>s</kbd> and type a title. Trakt finds the film or show;
+pick it, and for a show type `S02`, `S02E05`, or leave it blank for the whole
+show. You can also type an IMDb ID (`tt0000000 S01E02`) to skip that step, or
+press <kbd>Ctrl+R</kbd> to send the words to Prowlarr exactly as typed.
+<kbd>S</kbd> on a library row searches for other releases of what it matched
+on Trakt. Title search needs a Trakt `client_id` under `[trakt]`; without one,
+search by IMDb ID or with <kbd>Ctrl+R</kbd>.
+
+Each release shows a badge: `●` cached on TorBox (it streams at once), `○` not
+cached, `■` already in your library, `…` still getting its magnet, `?` unknown.
+Cached checks are batched and paced to stay well under TorBox's rate limit, so
+badges can take a moment to fill in.
+
+| Key | Action |
+| --- | --- |
+| <kbd>Enter</kbd> | Add the release to TorBox (or select it, if it's already in your library) |
+| <kbd>/</kbd> | Filter the releases |
+| <kbd>O</kbd> | Sort by cached, size, seeders or resolution |
+| <kbd>s</kbd> | New search |
+| <kbd>Esc</kbd> | Back |
 
 ---
 
@@ -108,6 +150,12 @@ tt-wrapper list webdl --json
 tt-wrapper add "magnet:?xt=urn:btih:..."
 tt-wrapper add "https://example.com/file.nzb"
 tt-wrapper add "https://example.com/video.mp4"
+
+# Search Prowlarr (needs [search] in the config)
+tt-wrapper search "Some Film"            # titles and their IMDb IDs
+tt-wrapper search tt0000000              # releases, cached first
+tt-wrapper search "tt0000000 S01E02" --sort size --json
+tt-wrapper search --raw "words as typed"
 
 # Direct stream matching query
 tt-wrapper stream "Interstellar"
@@ -195,6 +243,10 @@ stream_proxy = true # renew an expired TorBox link mid-stream; false hands mpv t
 theme = "catppuccin-mocha"
 show_unwatched_badge = false
 compact_mode = false
+
+[search] # optional; see Search above
+prowlarr_url = ""
+prowlarr_api_key = ""
 ```
 
 ### Environment Variables
@@ -205,6 +257,7 @@ All settings can be overridden using environment variables:
 - `TRAKT_CLIENT_SECRET`
 - `TRAKT_ACCESS_TOKEN`
 - `TRAKT_REFRESH_TOKEN`
+- `PROWLARR_API_KEY`
 
 ---
 
