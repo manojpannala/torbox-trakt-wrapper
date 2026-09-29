@@ -24,6 +24,7 @@ type Config struct {
 	Trakt  TraktConfig  `toml:"trakt"`
 	Player PlayerConfig `toml:"player"`
 	UI     UIConfig     `toml:"ui"`
+	Search SearchConfig `toml:"search"`
 
 	path string
 }
@@ -80,6 +81,17 @@ type UIConfig struct {
 	CompactMode        bool   `toml:"compact_mode"`
 }
 
+type SearchConfig struct {
+	ProwlarrURL    string `toml:"prowlarr_url"`
+	ProwlarrAPIKey string `toml:"prowlarr_api_key"`
+}
+
+// Enabled reports whether both Prowlarr settings are filled in; the URL
+// itself is checked when search is used, so a bad value never blocks startup.
+func (s SearchConfig) Enabled() bool {
+	return strings.TrimSpace(s.ProwlarrURL) != "" && strings.TrimSpace(s.ProwlarrAPIKey) != ""
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		TorBox: TorBoxConfig{
@@ -129,7 +141,7 @@ func MaskSecret(secret string) string {
 
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"TorBox[Category: %s, CacheTTL: %dm, Key: %s] | Trakt[Client: %s, Auth: %t, Expired: %t] | Player[%s, IPC: %t]",
+		"TorBox[Category: %s, CacheTTL: %dm, Key: %s] | Trakt[Client: %s, Auth: %t, Expired: %t] | Player[%s, IPC: %t] | Search[URL: %s, Key: %s]",
 		c.TorBox.DefaultCategory,
 		c.TorBox.CacheTTLMinutes,
 		MaskSecret(c.TorBox.APIKey),
@@ -138,6 +150,8 @@ func (c Config) String() string {
 		c.Trakt.IsTokenExpired(),
 		c.Player.Command,
 		c.Player.EnableIPC,
+		c.Search.ProwlarrURL,
+		MaskSecret(c.Search.ProwlarrAPIKey),
 	)
 }
 
@@ -190,6 +204,9 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if val := os.Getenv("TRAKT_REFRESH_TOKEN"); val != "" {
 		c.Trakt.RefreshToken = val
+	}
+	if val := os.Getenv("PROWLARR_API_KEY"); val != "" {
+		c.Search.ProwlarrAPIKey = val
 	}
 }
 

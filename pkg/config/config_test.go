@@ -339,3 +339,49 @@ func TestStreamProxy_CanBeTurnedOff(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, cfg.Player.StreamProxy)
 }
+
+func TestSearch_OffByDefault(t *testing.T) {
+	assert.False(t, DefaultConfig().Search.Enabled())
+}
+
+func TestSearch_NeedsBothTheURLAndTheKey(t *testing.T) {
+	assert.False(t, SearchConfig{ProwlarrURL: "http://127.0.0.1:9696"}.Enabled())
+	assert.False(t, SearchConfig{ProwlarrAPIKey: "k"}.Enabled())
+	assert.True(t, SearchConfig{ProwlarrURL: "http://127.0.0.1:9696", ProwlarrAPIKey: "k"}.Enabled())
+}
+
+func TestSearch_LoadsFromTheSearchTable(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	body := "[search]\nprowlarr_url = \"http://127.0.0.1:9696\"\nprowlarr_api_key = \"file_key\"\n"
+	require.NoError(t, os.WriteFile(configPath, []byte(body), 0o600))
+
+	cfg, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "http://127.0.0.1:9696", cfg.Search.ProwlarrURL)
+	assert.Equal(t, "file_key", cfg.Search.ProwlarrAPIKey)
+}
+
+func TestSearch_EnvKeyOverridesTheFileButIsNeverPersisted(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte("[search]\nprowlarr_api_key = \"file_key\"\n"), 0o600))
+	t.Setenv("PROWLARR_API_KEY", "env_prowlarr_key")
+
+	cfg, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "env_prowlarr_key", cfg.Search.ProwlarrAPIKey)
+
+	require.NoError(t, cfg.PersistTorBoxKey("tb_new"))
+	data, err := os.ReadFile(configPath) // #nosec G304
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "env_prowlarr_key")
+	assert.Contains(t, string(data), "file_key")
+}
+
+func TestSearch_StringerMasksTheProwlarrKey(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Search.ProwlarrAPIKey = "prowlarr_secret_value"
+
+	str := cfg.String()
+	assert.NotContains(t, str, "prowlarr_secret_value")
+	assert.Contains(t, str, "pro...lue")
+}
