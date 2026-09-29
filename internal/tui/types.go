@@ -35,6 +35,7 @@ type ViewType int
 const (
 	ViewLibrary ViewType = iota
 	ViewFileTree
+	ViewSearch
 )
 
 type ModalType int
@@ -68,6 +69,8 @@ type LibraryItem struct {
 	TraktSummary  string
 	WatchStatus   matcher.WatchStatus
 	Parsed        matcher.ParsedMedia
+	Hash          string // torrents only, normalised by search.NormalizeHash
+	IMDbID        string // from the Trakt match, for the S shortcut
 }
 
 func formatBytes(b int64) string {

@@ -20,6 +20,7 @@ import (
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/config"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/matcher"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/player"
+	"github.com/manojpannala/torbox-trakt-wrapper/pkg/search"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/stream"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/torbox"
 	"github.com/manojpannala/torbox-trakt-wrapper/pkg/trakt"
@@ -75,6 +76,19 @@ type AppModel struct {
 
 	statusText  string
 	isStatusErr bool
+
+	searcher     search.Searcher
+	searchOff    string
+	titles       titleSearcher
+	cached       cachedChecker
+	checker      *search.Checker
+	resolved     map[string]string
+	badgeTicking bool
+	badgeNote    string
+	jumpTo       int
+	clock        func() time.Time
+	tick         func(time.Duration, func(time.Time) tea.Msg) tea.Cmd
+	sv           searchView
 }
 
 type appOptions struct {
@@ -170,6 +184,8 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		inFlight = tabBit(initialTab)
 	}
 
+	searcher, searchOff := newSearcher(cfg)
+
 	m := AppModel{
 		ctx:            ctx,
 		cancel:         cancel,
@@ -192,6 +208,18 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		authModal:      NewAuthModal(),
 		loading:        true,
 		statusText:     "Ready",
+		searcher:       searcher,
+		searchOff:      searchOff,
+		checker:        search.NewChecker(),
+		resolved:       map[string]string{},
+		clock:          time.Now,
+		tick:           tea.Tick,
+	}
+	if trClient != nil {
+		m.titles = trClient
+	}
+	if tbClient != nil {
+		m.cached = tbClient
 	}
 	m.seedFromCache()
 	return m
@@ -207,13 +235,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = next.(AppModel)
 
 	var releaseCmd tea.Cmd
-	if m.heldLaunch != nil && !m.awaitingTrakt() && m.activeModal == ModalNone && !m.searchActive {
+	if m.heldLaunch != nil && !m.awaitingTrakt() && m.activeModal == ModalNone && !m.searchActive && m.activeView != ViewSearch {
 		releaseCmd = m.releaseHeldLaunch()
 	}
 	return m, tea.Batch(cmd, releaseCmd)
 }
 
 func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if next, cmd, ok := m.handleSearchMsg(msg); ok {
+		return next, cmd
+	}
+
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -253,6 +285,7 @@ func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.markFresh(TabTorrents)
 		m.torrents = m.convertTorrents(msg.Torrents)
 		m.reapplyFilter()
+		m.selectJumpTo()
 		return m, writeCacheCmd(m.store, cache.TorBoxTorrents, msg.Torrents)
 
 	case UsenetLoadedMsg:
@@ -479,6 +512,10 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.activeView == ViewSearch {
+		return m.searchKey(msg)
+	}
+
 	if m.activeView == ViewFileTree {
 		switch msg.String() {
 		case "esc", "b", "q":
@@ -570,6 +607,14 @@ func (m AppModel) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.searchActive = true
 		m.searchInput.Focus()
 		return m, textinput.Blink
+
+	case "s":
+		cmd := m.openSearch("")
+		return m, cmd
+
+	case "S":
+		cmd := m.searchSelected()
+		return m, cmd
 
 	case "r":
 		m.loading = true
@@ -691,12 +736,14 @@ func (m *AppModel) convertTorrents(items []torbox.Torrent) []LibraryItem {
 		var progress float64
 		var summary string
 
+		imdbID := matchRes.IMDbID
 		if len(t.Files) > 1 {
 			fileResults := m.matcher.MatchTorrentFiles(t.Files)
 			folderStatus := matcher.AggregateFolderStatus(fileResults)
 			badge = folderStatus.Badge
 			watchStatus = folderStatus.Status
 			summary = folderStatus.Summary
+			imdbID = folderIMDbID(matchRes, fileResults)
 		} else {
 			badge = matchRes.Badge
 			watchStatus = matchRes.Status
@@ -721,9 +768,25 @@ func (m *AppModel) convertTorrents(items []torbox.Torrent) []LibraryItem {
 			TraktSummary:  summary,
 			WatchStatus:   watchStatus,
 			Parsed:        parsed,
+			Hash:          search.NormalizeHash(t.Hash),
+			IMDbID:        imdbID,
 		}
 	}
 	return res
+}
+
+// folderIMDbID is a folder's own match, or else the first of its files that
+// matched: a bare "S02" pack name doesn't parse as a show.
+func folderIMDbID(own matcher.MatchResult, files []matcher.MatchResult) string {
+	if own.IMDbID != "" {
+		return own.IMDbID
+	}
+	for _, f := range files {
+		if f.IMDbID != "" {
+			return f.IMDbID
+		}
+	}
+	return ""
 }
 
 func (m *AppModel) convertUsenet(items []torbox.UsenetItem) []LibraryItem {
@@ -748,6 +811,7 @@ func (m *AppModel) convertUsenet(items []torbox.UsenetItem) []LibraryItem {
 			TraktProgress: matchRes.ProgressPercent,
 			WatchStatus:   matchRes.Status,
 			Parsed:        parsed,
+			IMDbID:        matchRes.IMDbID,
 		}
 	}
 	return res
@@ -775,6 +839,7 @@ func (m *AppModel) convertWebDL(items []torbox.WebDLItem) []LibraryItem {
 			TraktProgress: matchRes.ProgressPercent,
 			WatchStatus:   matchRes.Status,
 			Parsed:        parsed,
+			IMDbID:        matchRes.IMDbID,
 		}
 	}
 	return res
@@ -789,11 +854,13 @@ func (m *AppModel) recalculateBadges() {
 			t.TraktBadge = folderStatus.Badge
 			t.WatchStatus = folderStatus.Status
 			t.TraktSummary = folderStatus.Summary
+			t.IMDbID = folderIMDbID(m.matcher.MatchParsed(t.Parsed), fileResults)
 		} else {
 			res := m.matcher.MatchParsed(t.Parsed)
 			t.TraktBadge = res.Badge
 			t.WatchStatus = res.Status
 			t.TraktProgress = res.ProgressPercent
+			t.IMDbID = res.IMDbID
 		}
 	}
 	for i := range m.usenet {
@@ -802,6 +869,7 @@ func (m *AppModel) recalculateBadges() {
 		u.TraktBadge = res.Badge
 		u.TraktProgress = res.ProgressPercent
 		u.WatchStatus = res.Status
+		u.IMDbID = res.IMDbID
 	}
 	for i := range m.webdl {
 		w := &m.webdl[i]
@@ -809,6 +877,7 @@ func (m *AppModel) recalculateBadges() {
 		w.TraktBadge = res.Badge
 		w.TraktProgress = res.ProgressPercent
 		w.WatchStatus = res.Status
+		w.IMDbID = res.IMDbID
 	}
 }
 
@@ -828,9 +897,12 @@ func (m AppModel) View() tea.View {
 	sb.WriteString("\n")
 
 	var body string
-	if m.activeView == ViewFileTree {
+	switch m.activeView {
+	case ViewFileTree:
 		body = m.fileTree.Render(m.theme, m.width, m.height)
-	} else {
+	case ViewSearch:
+		body = m.renderSearch()
+	default:
 		body = m.renderLibraryList()
 	}
 
@@ -1003,6 +1075,9 @@ func (m AppModel) renderLibraryList() string {
 
 func (m AppModel) renderFooter() string {
 	shortcuts := "[Tab] Switch  [Enter] Stream  [f] Files  [/] Filter  [a] Add  [d] Delete  [A] Trakt  [?] Help  [q] Quit"
+	if m.activeView == ViewSearch {
+		shortcuts = m.searchShortcuts()
+	}
 
 	status := m.statusText
 	if status == "Ready" && !m.isStatusErr {
