@@ -162,16 +162,6 @@ tt-wrapper add "magnet:?xt=urn:btih:..."
 tt-wrapper add "https://example.com/file.nzb"
 tt-wrapper add "https://example.com/video.mp4"
 
-# Search Prowlarr (needs [search] in the config)
-tt-wrapper search "Some Film"            # titles and their IMDb IDs
-tt-wrapper search tt0000000              # releases, cached first
-tt-wrapper search "tt0000000 S01E02" --sort size --json
-tt-wrapper search --raw "words as typed"
-
-# Direct stream matching query
-tt-wrapper stream "Interstellar"
-tt-wrapper stream 102
-
 # Inspect or initialize configuration
 tt-wrapper config
 tt-wrapper config path
