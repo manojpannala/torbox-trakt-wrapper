@@ -93,6 +93,10 @@ Playing something Trakt has a partial position for opens a resume prompt first:
 <kbd>r</kbd> resumes, <kbd>s</kbd> starts over, <kbd>Esc</kbd> cancels. Inside
 that prompt <kbd>r</kbd> means resume, not refresh.
 
+The footer lists the common keys. On a narrow terminal, or next to a long
+status message, it drops the less-used ones so it stays on one line;
+<kbd>?</kbd> always lists them all.
+
 ---
 
 ## 🔎 Search (optional)
@@ -109,7 +113,10 @@ prowlarr_api_key = "your_prowlarr_api_key" # Prowlarr → Settings → General �
 
 `prowlarr_url` may use `http` only for a Prowlarr on this machine
 (`localhost`, `127.0.0.1`, `::1`); anything else must use `https`. The key
-can also come from `PROWLARR_API_KEY`.
+can also come from `PROWLARR_API_KEY`, so it never has to be in the file.
+
+Until both are set, <kbd>s</kbd> says what's missing instead of opening search.
+`tt-wrapper config` prints the Prowlarr URL without any credentials in it.
 
 In the TUI, press <kbd>s</kbd> and type a title. Trakt finds the film or show;
 pick it, and for a show type `S02`, `S02E05`, or leave it blank for the whole
@@ -124,9 +131,13 @@ cached, `■` already in your library, `…` still getting its magnet, `?` unkno
 Cached checks are batched and paced to stay well under TorBox's rate limit, so
 badges can take a moment to fill in.
 
+Search keeps nothing on disk. Cached answers (fresh for 15 minutes) and magnets
+already fetched live in memory until you quit, so repeating a search asks
+TorBox only about releases it hasn't checked recently.
+
 | Key | Action |
 | --- | --- |
-| <kbd>Enter</kbd> | Add the release to TorBox (or select it, if it's already in your library) |
+| <kbd>Enter</kbd> | Add the release to TorBox and jump to it in the library (or just jump, if it's already there) |
 | <kbd>/</kbd> | Filter the releases |
 | <kbd>O</kbd> | Sort by cached, size, seeders or resolution |
 | <kbd>s</kbd> | New search |
@@ -186,8 +197,10 @@ $XDG_STATE_HOME/torbox-trakt-wrapper/tt-wrapper.log   # ~/.local/state/... by de
 ```
 
 The file is created at `0600` and only when `--verbose` is passed — a normal run
-writes nothing. It records API requests (method, path, status, duration), the
-flags `mpv` was launched with, and scrobble decisions.
+writes nothing. It records TorBox and Trakt API requests (method, path, status,
+duration), the flags `mpv` was launched with, and scrobble decisions. Trakt
+paths include the titles you searched for or played. Requests to Prowlarr are
+not logged here; Prowlarr keeps its own log.
 
 API keys and tokens are never written. Request bodies and headers are never
 logged, credential query parameters are blanked to `REDACTED` (TorBox's
