@@ -1073,12 +1073,38 @@ func (m AppModel) renderLibraryList() string {
 	return sb.String()
 }
 
-func (m AppModel) renderFooter() string {
-	shortcuts := "[Tab] Switch  [Enter] Stream  [f] Files  [/] Filter  [a] Add  [d] Delete  [A] Trakt  [?] Help  [q] Quit"
-	if m.activeView == ViewSearch {
-		shortcuts = m.searchShortcuts()
-	}
+// footerHint is one library shortcut. drop is the order hints leave a
+// footer too narrow for them all; zero never leaves, and [?] Help lists
+// every key.
+type footerHint struct {
+	text string
+	drop int
+}
 
+var libraryHints = []footerHint{
+	{"[Tab] Switch", 1}, {"[Enter] Stream", 8}, {"[f] Files", 3}, {"[/] Filter", 5},
+	{"[a] Add", 6}, {"[s] Search", 7}, {"[d] Delete", 4}, {"[A] Trakt", 2},
+	{"[?] Help", 0}, {"[q] Quit", 0},
+}
+
+// fitHints joins hints, dropping them in their drop order until the line
+// fits in width.
+func fitHints(hints []footerHint, width int) string {
+	for dropped := 0; ; dropped++ {
+		var kept []string
+		for _, h := range hints {
+			if h.drop == 0 || h.drop > dropped {
+				kept = append(kept, h.text)
+			}
+		}
+		line := strings.Join(kept, "  ")
+		if lipgloss.Width(line) <= width || dropped >= len(hints) {
+			return line
+		}
+	}
+}
+
+func (m AppModel) renderFooter() string {
 	status := m.statusText
 	if status == "Ready" && !m.isStatusErr {
 		failed := m.fetchFailed&tabBit(m.activeTab) != 0
@@ -1089,6 +1115,12 @@ func (m AppModel) renderFooter() string {
 	}
 	if m.isStatusErr {
 		status = m.theme.StatusError.Render("✖ " + status)
+	}
+
+	shortcuts := m.searchShortcuts()
+	if m.activeView != ViewSearch {
+		// The padding, the margin and a two-column gap after the status.
+		shortcuts = fitHints(libraryHints, m.width-lipgloss.Width(status)-6)
 	}
 
 	gap := max(m.width-lipgloss.Width(status)-lipgloss.Width(shortcuts)-4, 0)

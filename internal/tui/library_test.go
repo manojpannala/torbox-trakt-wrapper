@@ -547,6 +547,27 @@ func TestFooter_KeepsTheErrorWhenThereIsNoCachedData(t *testing.T) {
 	assert.Contains(t, next.(AppModel).renderFooter(), "Failed to load torrents")
 }
 
+func TestFooter_ListsTheSearchKey(t *testing.T) {
+	m := testModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 220, Height: 40})
+
+	footer := next.(AppModel).renderFooter()
+	assert.Contains(t, footer, "[s] Search")
+	assert.Contains(t, footer, "[Tab] Switch")
+}
+
+func TestFooter_DropsHintsToStayOnOneLine(t *testing.T) {
+	m := wideCachedModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	footer := next.(AppModel).renderFooter()
+	assert.NotContains(t, footer, "\n")
+	assert.Contains(t, footer, "refreshing…")
+	assert.Contains(t, footer, "[s] Search")
+	assert.Contains(t, footer, "[?] Help")
+	assert.NotContains(t, footer, "[Tab] Switch", "the tab row already shows how to switch")
+}
+
 func TestRefresh_ClearsItsOwnStatusWhenFreshDataLands(t *testing.T) {
 	m := testModel(t)
 
