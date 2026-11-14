@@ -300,3 +300,16 @@ func TestClient_APIErrorResponses(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Something went wrong")
 }
+
+func TestClient_TransportErrorRedactsAPIKey(t *testing.T) {
+	client := torbox.NewClient("test-api-key",
+		torbox.WithBaseURL("http://127.0.0.1:1"),
+		torbox.WithRetries(0, 0),
+	)
+
+	_, err := client.RequestDownloadLink(context.Background(), 1, 2, false)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "test-api-key")
+	assert.Contains(t, err.Error(), "requestdl")
+	assert.Contains(t, err.Error(), "REDACTED")
+}

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -231,7 +232,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body io.Reader, contentType string, target any, attempts int) error {
-	url := fmt.Sprintf("%s%s", c.baseURL, path)
+	reqURL := fmt.Sprintf("%s%s", c.baseURL, path)
 
 	var reqBodyBytes []byte
 	if body != nil {
@@ -258,7 +259,7 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 			currentBody = bytes.NewReader(reqBodyBytes)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, method, url, currentBody)
+		req, err := http.NewRequestWithContext(ctx, method, reqURL, currentBody)
 		if err != nil {
 			return fmt.Errorf("creating request: %w", err)
 		}
@@ -278,7 +279,7 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			c.logger.Debug("torbox request failed", "method", method, "path", logging.Redact(path), "err", logging.Redact(err.Error()))
-			lastErr = err
+			lastErr = redactURLError(err)
 			continue
 		}
 
@@ -364,4 +365,14 @@ func mapStatusToError(statusCode int, apiErr *APIError) error {
 	default:
 		return apiErr
 	}
+}
+
+// redactURLError blanks credentials in the URL a transport error carries;
+// the download-link endpoints send the API key as token=.
+func redactURLError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		urlErr.URL = logging.Redact(urlErr.URL)
+	}
+	return err
 }
