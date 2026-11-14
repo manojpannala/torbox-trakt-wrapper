@@ -78,6 +78,7 @@ type AppModel struct {
 	isStatusErr bool
 
 	searcher     search.Searcher
+	searchCaps   map[search.Group]int
 	searchOff    string
 	titles       titleSearcher
 	cached       cachedChecker
@@ -184,7 +185,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		inFlight = tabBit(initialTab)
 	}
 
-	searcher, searchOff := newSearcher(cfg)
+	searcher, searchCaps, searchOff := newSearcher(cfg, logger)
 
 	m := AppModel{
 		ctx:            ctx,
@@ -209,6 +210,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 		loading:        true,
 		statusText:     "Ready",
 		searcher:       searcher,
+		searchCaps:     searchCaps,
 		searchOff:      searchOff,
 		checker:        search.NewChecker(),
 		resolved:       map[string]string{},

@@ -269,8 +269,9 @@ func TestSearch_TitleThenReleasesWithBadges(t *testing.T) {
 	view := plain(m)
 	assert.Contains(t, view, "General ✓ 2 · IDs ✓ 0 · sort: rank")
 	assert.NotContains(t, view, "Other.Film", "the title filter drops a different film")
-	require.Len(t, m.sv.rows, 2)
-	assert.Equal(t, tuiHashB, m.sv.rows[0].Hash, "rank puts 70-seeder B first")
+	rows := m.shownRows()
+	require.Len(t, rows, 2)
+	assert.Equal(t, tuiHashB, rows[0].Hash, "rank puts 70-seeder B first")
 	assert.Contains(t, view, "● 1080p")
 	assert.Contains(t, view, "○ 2160p")
 	assert.Contains(t, view, "bluray x264 GRP")
@@ -345,7 +346,7 @@ func TestSearch_RawSendsTheTextAsTyped(t *testing.T) {
 	m = hit(t, m, rawKey)
 
 	assert.ElementsMatch(t, []string{"1 search other film", "7 search other film"}, fs.queries())
-	assert.Len(t, m.sv.rows, 3, "no title filter on a raw search")
+	assert.Len(t, m.shownRows(), 3, "no title filter on a raw search")
 }
 
 func TestSearch_EscCancelsTheRequestsInFlight(t *testing.T) {
@@ -379,12 +380,12 @@ func TestSearch_AReplyToAnOlderSearchIsIgnored(t *testing.T) {
 	m, _ = sendKey(m, sKey)
 	m = typeText(m, "tt0000001")
 	m = hit(t, m, enterKey)
-	rows := len(m.sv.rows)
+	rows := len(m.shownRows())
 
 	m, _ = sendMsg(m, searchReleasesMsg{Seq: m.sv.seq - 1, Req: search.Request{IndexerID: 1},
 		Rows: []search.Result{{Title: "Sample.Film.2014.720p-OLD", Hash: strings.Repeat("d", 40), IndexerID: 1, GUID: "d"}}})
 
-	assert.Len(t, m.sv.rows, rows)
+	assert.Len(t, m.shownRows(), rows)
 }
 
 func TestSearch_OCyclesTheSortAndSlashFilters(t *testing.T) {
@@ -395,7 +396,7 @@ func TestSearch_OCyclesTheSortAndSlashFilters(t *testing.T) {
 
 	m = hit(t, m, capOKey)
 	assert.Contains(t, plain(m), "sort: size")
-	assert.Equal(t, tuiHashB, m.sv.rows[0].Hash, "the 9 GiB release is largest")
+	assert.Equal(t, tuiHashB, m.shownRows()[0].Hash, "the 9 GiB release is largest")
 
 	m = hit(t, m, slashKey)
 	m = typeText(m, "1080p")
@@ -414,20 +415,24 @@ func TestSearch_PendingRowResolvesThenEnterAddsAndSelectsIt(t *testing.T) {
 		},
 		"/torrents/mylist": respond(200, `{"success":true,"data":[
 			{"id":5,"name":"Test.Feature.Alpha.2023.1080p.mkv"},
-			{"id":77,"name":"Sample.Film.2014.2160p.WEB-DL.HDR-GRP","hash":"`+tuiHashB+`"}]}`),
+			{"id":77,"name":"Sample.Film.2014.1080p.WEB-DL.HDR-GRP","hash":"`+tuiHashB+`"}]}`),
 	})
 	m, fs, _ := searchModel(t, nil)
 	var resolves int
 	fs.rows[1] = []search.Result{
-		{Title: "Sample.Film.2014.2160p.WEB-DL.HDR-GRP", Seeders: 70, Indexers: []string{"General"}, IndexerID: 1, GUID: "b",
+		{Title: "Sample.Film.2014.1080p.WEB-DL.HDR-GRP", Seeders: 70, Indexers: []string{"General"}, IndexerID: 1, GUID: "b",
 			Resolve: func(context.Context) (string, error) { resolves++; return tuiHashB, nil }},
-		{Title: "Sample.Film.2014.1080p-BAD", Seeders: 95, Indexers: []string{"General"}, IndexerID: 1, GUID: "bad",
+		{Title: "Sample.Film.2014.2160p-BAD", Seeders: 95, Indexers: []string{"General"}, IndexerID: 1, GUID: "bad",
 			Resolve: func(context.Context) (string, error) { return "", search.ErrNotMagnet }},
 	}
 	for i := range 10 {
 		hash := fmt.Sprintf("%040x", i+1)
+		res := "1080p"
+		if i < 4 {
+			res = "2160p"
+		}
 		fs.rows[1] = append(fs.rows[1], search.Result{
-			Title: fmt.Sprintf("Sample.Film.2014.720p-G%d", i), Seeders: 80 + i, Indexers: []string{"General"}, IndexerID: 1, GUID: fmt.Sprint("g", i),
+			Title: fmt.Sprintf("Sample.Film.2014.%s-G%d", res, i), Seeders: 80 + i, Indexers: []string{"General"}, IndexerID: 1, GUID: fmt.Sprint("g", i),
 			Resolve: func(context.Context) (string, error) { return hash, nil },
 		})
 	}
@@ -435,14 +440,14 @@ func TestSearch_PendingRowResolvesThenEnterAddsAndSelectsIt(t *testing.T) {
 	m = typeText(m, "tt0000001")
 	m = hit(t, m, enterKey)
 
-	assert.Equal(t, 1, m.sv.dropped, "a release with no magnet is dropped")
+	assert.Equal(t, 1, m.sv.tally.Dropped[search.DropUnresolved], "a release with no magnet is dropped")
 	assert.Contains(t, plain(m), "1 couldn't be resolved")
-	assert.Len(t, m.sv.rows, 11)
+	assert.Len(t, m.shownRows(), 11)
 	assert.Zero(t, resolves, "the ten best-seeded resolve up front, and b is eleventh")
 
 	m, walk := moveTo(t, m, func(r search.Result) bool { return r.GUID == "b" })
 	require.True(t, m.sv.resolving["1/b"], "the row under the cursor resolves")
-	assert.Contains(t, plain(m), "… 2160p")
+	assert.Contains(t, plain(m), "… 1080p")
 	m, enter := sendKey(m, enterKey)
 	assert.Contains(t, plain(m), "Getting the magnet for that release…")
 	m = settle(t, m, tea.Batch(walk, enter))
@@ -454,13 +459,13 @@ func TestSearch_PendingRowResolvesThenEnterAddsAndSelectsIt(t *testing.T) {
 	item := m.selectedCurrentItem()
 	require.NotNil(t, item)
 	assert.Equal(t, 77, item.ID, "the new torrent is selected once the list has it")
-	assert.Equal(t, "Added Sample.Film.2014.2160p.WEB-DL.HDR-GRP", m.statusText)
+	assert.Equal(t, "Added Sample.Film.2014.1080p.WEB-DL.HDR-GRP", m.statusText)
 
 	m, _ = sendKey(m, sKey)
 	m = typeText(m, "tt0000001")
 	m = hit(t, m, enterKey)
 	assert.Equal(t, 1, resolves, "a resolved hash is remembered for the session")
-	assert.Contains(t, plain(m), "■ 2160p", "and it is now in the library")
+	assert.Contains(t, plain(m), "■ 1080p", "and it is now in the library")
 }
 
 func TestSearch_EnterOnALibraryHashSelectsTheExistingRow(t *testing.T) {
@@ -533,4 +538,223 @@ func TestSearch_SOnAnUnmatchedRowSaysSo(t *testing.T) {
 	assert.Equal(t, ViewLibrary, m.activeView)
 	assert.Contains(t, m.statusText, "No Trakt match for this row")
 	assert.Empty(t, fs.queries())
+}
+
+func TestSearch_ShowsPendingCounterUntilAllAnswer(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	// Enter -> lookupWork -> searchWorkMsg -> fetchIndexers -> searchIndexersMsg
+	m, cmd := sendKey(m, enterKey)
+	m, cmd = sendMsg(m, cmd())
+	m, cmd = sendMsg(m, cmd())
+	m, _ = sendMsg(m, cmd())
+
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 1, Indexer: "General"},
+		Rows: []search.Result{
+			{Title: "Sample.Film.2014.1080p-GRP", Hash: tuiHashA, Size: 2 << 30, Seeders: 10, Indexers: []string{"General"}, IndexerID: 1, GUID: "a"},
+		},
+	})
+	view := plain(m)
+	assert.Contains(t, view, "Searching… 1 of 2 indexers")
+	assert.NotContains(t, view, "Sample.Film.2014.1080p-GRP")
+
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 7, Indexer: "IDs", ByID: true},
+		Rows: []search.Result{
+			{Title: "Sample.Film.2014.2160p-GRP", Hash: tuiHashB, Size: 5 << 30, Seeders: 10, Indexers: []string{"IDs"}, IndexerID: 7, GUID: "b"},
+		},
+	})
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 7, Indexer: "IDs"},
+	})
+	require.True(t, m.sv.drawn)
+	require.Len(t, m.sv.sections, 2)
+	assert.Equal(t, search.Group4K, m.sv.sections[0].Group)
+	assert.Equal(t, search.Group1080p, m.sv.sections[1].Group)
+}
+
+func TestSearch_SettleTimeoutDrawsThenLateResultsAppend(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m, cmd := sendKey(m, enterKey)
+	m, cmd = sendMsg(m, cmd())
+	m, cmd = sendMsg(m, cmd())
+	m, _ = sendMsg(m, cmd())
+
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 1, Indexer: "General"},
+		Rows: []search.Result{
+			{Title: "Sample.Film.2014.1080p-GRP", Hash: tuiHashA, Size: 2 << 30, Seeders: 10, Indexers: []string{"General"}, IndexerID: 1, GUID: "a"},
+		},
+	})
+	assert.False(t, m.sv.drawn)
+
+	m, _ = sendMsg(m, searchSettleMsg{Seq: m.sv.seq})
+	require.True(t, m.sv.drawn)
+	require.Len(t, m.sv.sections, 1)
+
+	lateHash := strings.Repeat("e", 40)
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 7, Indexer: "IDs", ByID: true},
+		Rows: []search.Result{
+			{Title: "Sample.Film.2014.2160p-LATE", Hash: lateHash, Size: 5 << 30, Seeders: 99, Indexers: []string{"IDs"}, IndexerID: 7, GUID: "late"},
+		},
+	})
+	require.Len(t, m.sv.sections, 2)
+	assert.Equal(t, tuiHashA, m.sv.sections[0].Rows[0].Hash, "existing row order unchanged")
+	assert.True(t, m.sv.sections[1].Late)
+	assert.Equal(t, lateHash, m.sv.sections[1].Rows[0].Hash)
+}
+
+func TestSearch_LateDuplicateMergesIndexerWithoutLateSection(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m, cmd := sendKey(m, enterKey)
+	m, cmd = sendMsg(m, cmd())
+	m, cmd = sendMsg(m, cmd())
+	m, _ = sendMsg(m, cmd())
+
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 1, Indexer: "General"},
+		Rows: []search.Result{
+			{Title: "Sample.Film.2014.1080p-GRP", Hash: tuiHashA, Size: 2 << 30, Seeders: 10, Indexers: []string{"General"}, IndexerID: 1, GUID: "a"},
+		},
+	})
+	m, _ = sendMsg(m, searchSettleMsg{Seq: m.sv.seq})
+
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 7, Indexer: "IDs", ByID: true},
+		Rows: []search.Result{
+			{Title: "Sample.Film.2014.1080p-DUP", Hash: tuiHashA, Size: 2 << 30, Seeders: 99, Indexers: []string{"IDs"}, IndexerID: 7, GUID: "dup"},
+		},
+	})
+	require.Len(t, m.sv.sections, 1)
+	assert.False(t, m.sv.sections[0].Late)
+	assert.Equal(t, []string{"General", "IDs"}, m.sv.sections[0].Rows[0].Indexers)
+}
+
+func TestSearch_BadgeCheckedDoesNotReorderAfterDraw(t *testing.T) {
+	m, fs, _ := searchModel(t, nil)
+	fs.rows[1] = []search.Result{
+		{Title: "Sample.Film.2014.1080p.First-GRP", Hash: tuiHashB, Size: 2 << 30, Seeders: 90, Indexers: []string{"General"}, IndexerID: 1, GUID: "b"},
+		{Title: "Sample.Film.2014.1080p.Second-GRP", Hash: tuiHashA, Size: 2 << 30, Seeders: 40, Indexers: []string{"General"}, IndexerID: 1, GUID: "a"},
+	}
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	rows := m.visibleReleases()
+	require.Len(t, rows, 2)
+	assert.Equal(t, tuiHashB, rows[0].Hash)
+	assert.Equal(t, tuiHashA, rows[1].Hash)
+}
+
+func TestSearch_CapsBadgeCheckToShownHashes(t *testing.T) {
+	m, fs, fc := searchModel(t, nil)
+	fs.rows[1] = nil
+	for i := range 40 {
+		fs.rows[1] = append(fs.rows[1], search.Result{
+			Title:     fmt.Sprintf("Sample.Film.2014.1080p-G%02d", i),
+			Hash:      fmt.Sprintf("%040x", i+10),
+			Size:      2 << 30,
+			Seeders:   100 - i,
+			Indexers:  []string{"General"},
+			IndexerID: 1,
+			GUID:      fmt.Sprintf("g%02d", i),
+		})
+	}
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	_ = hit(t, m, enterKey)
+
+	require.Len(t, fc.batches, 1)
+	assert.Len(t, fc.batches[0], 10)
+}
+
+func TestSearch_FailedResolveRemovesRowWithoutPullingReplacement(t *testing.T) {
+	m, fs, _ := searchModel(t, nil)
+	h2 := strings.Repeat("2", 40)
+	h3 := strings.Repeat("3", 40)
+	fs.rows[1] = nil
+	for i := range 11 {
+		row := search.Result{
+			Title:     fmt.Sprintf("Sample.Film.2014.1080p-G%02d", i),
+			Size:      2 << 30,
+			Seeders:   100 - i,
+			Indexers:  []string{"General"},
+			IndexerID: 1,
+			GUID:      fmt.Sprintf("g%02d", i),
+		}
+		switch i {
+		case 0:
+			row.Resolve = func(context.Context) (string, error) { return "", search.ErrNotMagnet }
+		case 1:
+			row.Hash = h2
+		default:
+			row.Hash = fmt.Sprintf("%040x", i+100)
+			if i == 2 {
+				row.Hash = h3
+			}
+		}
+		fs.rows[1] = append(fs.rows[1], row)
+	}
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	require.Len(t, m.sv.sections, 1)
+	assert.Equal(t, 9, m.sv.sections[0].Shown)
+	assert.Equal(t, h2, m.sv.sections[0].Rows[0].Hash)
+	assert.Equal(t, h3, m.sv.sections[0].Rows[1].Hash)
+}
+
+func TestSearch_InvalidCapsTurnsSearchOffWithoutStoppingApp(t *testing.T) {
+	m := testModelWith(t, func(c *config.Config) {
+		c.Search.ProwlarrURL = "http://127.0.0.1:9696"
+		c.Search.ProwlarrAPIKey = "test-prowlarr-key"
+		c.Search.Resolutions = map[string]int{"720p": 99}
+	})
+
+	m, _ = sendKey(m, sKey)
+
+	assert.Equal(t, ViewLibrary, m.activeView)
+	assert.Contains(t, m.statusText, "Search is off:")
+	assert.Contains(t, m.statusText, "720p")
+	assert.NotEmpty(t, plain(m))
+}
+
+func TestSearch_SUsesTraktLanguageToRankReleases(t *testing.T) {
+	m, fs, _ := searchModel(t, nil)
+	m.titles = fakeTitles{hits: []trakt.TitleHit{
+		{Kind: "show", Title: "Sample Show", Year: 2019, Language: "ta", IDs: trakt.IDs{Trakt: 2, IMDB: "tt0000002"}},
+	}}
+	hTa := strings.Repeat("a", 40)
+	hUntagged := strings.Repeat("b", 40)
+	fs.rows[1] = []search.Result{
+		{Title: "Sample.Show.S02E05.1080p-GRP", Hash: hUntagged, Size: 2 << 30, Seeders: 90, Indexers: []string{"General"}, IndexerID: 1, GUID: "u"},
+		{Title: "Sample.Show.S02E05.1080p.Tamil-GRP", Hash: hTa, Size: 2 << 30, Seeders: 10, Indexers: []string{"General"}, IndexerID: 1, GUID: "t"},
+	}
+	m, _ = sendMsg(m, TraktCatalogLoadedMsg{Gen: m.traktGen, Shows: []trakt.WatchedShow{
+		{Plays: 1, Show: trakt.Show{Title: "Sample Show", Year: 2019, IDs: trakt.IDs{Trakt: 2, IMDB: "tt0000002"}}},
+	}})
+	m, _ = sendMsg(m, TorrentsLoadedMsg{Gen: m.libGen[TabTorrents], Torrents: []torbox.Torrent{
+		{ID: 4, Name: "Sample.Show.S02E05.1080p.WEB.mkv"},
+	}})
+
+	m = hit(t, m, capSKey)
+
+	rows := m.visibleReleases()
+	require.Len(t, rows, 2)
+	assert.Equal(t, hTa, rows[0].Hash)
 }

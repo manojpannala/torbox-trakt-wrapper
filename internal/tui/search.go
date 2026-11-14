@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,6 +44,7 @@ const (
 const (
 	titleTimeout = 15 * time.Second
 	badgeTimeout = 15 * time.Second
+	settleWait   = 5 * time.Second
 )
 
 // indexerRun is one indexer's part in a search.
@@ -57,27 +60,32 @@ type indexerRun struct {
 // reply carries the seq it was asked under; a reply to an older search is
 // dropped.
 type searchView struct {
-	stage     searchStage
-	input     textinput.Model
-	filter    textinput.Model
-	filtering bool
-	seq       uint64
-	ctx       context.Context
-	cancel    context.CancelFunc
-	hits      []trakt.TitleHit
-	work      search.Work
-	raw       bool
-	runs      []indexerRun
-	rows      []search.Result
-	resolver  *search.Resolver
-	resolving map[string]bool
-	dropped   int
-	addAfter  string
-	sortKey   search.SortKey
-	cursor    int
-	top       int
-	status    string
-	isErr     bool
+	stage         searchStage
+	input         textinput.Model
+	filter        textinput.Model
+	filtering     bool
+	seq           uint64
+	ctx           context.Context
+	cancel        context.CancelFunc
+	hits          []trakt.TitleHit
+	work          search.Work
+	raw           bool
+	runs          []indexerRun
+	pool          []search.Result
+	drawn         bool
+	sections      []search.Section
+	prefs         search.Prefs
+	tally         search.Tally
+	settleArmed   bool
+	loggedSummary bool
+	resolver      *search.Resolver
+	resolving     map[string]bool
+	addAfter      string
+	sortKey       search.SortKey
+	cursor        int
+	top           int
+	status        string
+	isErr         bool
 }
 
 type searchTitlesMsg struct {
@@ -118,6 +126,10 @@ type searchAddedMsg struct {
 	Err       error
 }
 
+type searchSettleMsg struct {
+	Seq uint64
+}
+
 type badgeTickMsg struct{}
 
 type badgeCheckedMsg struct {
@@ -126,17 +138,21 @@ type badgeCheckedMsg struct {
 	Err    error
 }
 
-// newSearcher builds the Prowlarr client, or says why search is off. A bad
-// URL only turns search off; the rest of the app still starts.
-func newSearcher(cfg *config.Config) (search.Searcher, string) {
-	if !cfg.Search.Enabled() {
-		return nil, "Search is off: set prowlarr_url and prowlarr_api_key under [search] in " + cfg.Path()
-	}
-	client, err := prowlarr.New(cfg.Search.ProwlarrURL, cfg.Search.ProwlarrAPIKey)
+// newSearcher builds the Prowlarr client, or says why search is off. Bad
+// settings or a bad URL only turn search off; the rest of the app still starts.
+func newSearcher(cfg *config.Config, logger *slog.Logger) (search.Searcher, map[search.Group]int, string) {
+	caps, err := search.Caps(cfg.Search.Resolutions)
 	if err != nil {
-		return nil, "Search is off: " + prowlarr.Describe(err)
+		return nil, nil, "Search is off: " + err.Error()
 	}
-	return client, ""
+	if !cfg.Search.Enabled() {
+		return nil, caps, "Search is off: set prowlarr_url and prowlarr_api_key under [search] in " + cfg.Path()
+	}
+	client, err := prowlarr.New(cfg.Search.ProwlarrURL, cfg.Search.ProwlarrAPIKey, prowlarr.WithLogger(logger))
+	if err != nil {
+		return nil, caps, "Search is off: " + prowlarr.Describe(err)
+	}
+	return client, caps, ""
 }
 
 func newSearchInput(placeholder string) textinput.Model {
@@ -263,7 +279,9 @@ func lookupWork(ctx context.Context, titles titleSearcher, q search.Query, seq u
 	case hit == nil:
 		return searchWorkMsg{Seq: seq, Work: q.Work("", "", 0), Note: "Trakt has no title for " + q.IMDbID + ", so searching by ID only"}
 	}
-	return searchWorkMsg{Seq: seq, Work: q.Work(hit.Kind, hit.Title, hit.Year)}
+	w := q.Work(hit.Kind, hit.Title, hit.Year)
+	w.Language = hit.Language
+	return searchWorkMsg{Seq: seq, Work: w}
 }
 
 func (m *AppModel) fetchIndexers() tea.Cmd {
@@ -279,6 +297,7 @@ func (m *AppModel) fetchIndexers() tea.Cmd {
 func (m *AppModel) pickWork(hit trakt.TitleHit) tea.Cmd {
 	q := search.Query{IMDbID: hit.IDs.IMDB}
 	m.sv.work = q.Work(hit.Kind, hit.Title, hit.Year)
+	m.sv.work.Language = hit.Language
 	if m.sv.work.Kind == search.Show {
 		m.sv.stage = stageEpisode
 		m.sv.input = newSearchInput("S02, S02E05, or blank for the whole show")
@@ -338,6 +357,12 @@ func (m AppModel) handleSearchMsg(msg tea.Msg) (AppModel, tea.Cmd, bool) {
 		}
 		return m, m.takeReleases(msg), true
 
+	case searchSettleMsg:
+		if msg.Seq != m.sv.seq {
+			return m, nil, true
+		}
+		return m, m.onSettle(), true
+
 	case searchResolvedMsg:
 		if msg.Seq != m.sv.seq {
 			return m, nil, true
@@ -364,7 +389,6 @@ func (m AppModel) handleSearchMsg(msg tea.Msg) (AppModel, tea.Cmd, bool) {
 			m.checker.Failed()
 			m.badgeNote = "Badge check failed, so some badges show ?"
 		}
-		m.sortReleases(m.selectedKey())
 		return m, m.pumpBadges(), true
 	}
 	return m, nil, false
@@ -422,33 +446,216 @@ func (m *AppModel) takeReleases(msg searchReleasesMsg) tea.Cmd {
 		if errors.Is(msg.Err, search.ErrUnauthorized) {
 			m.sv.status, m.sv.isErr = prowlarr.Describe(msg.Err), true
 		}
-		return m.settleReleases()
+		return m.afterIndexerReply(nil)
 	}
-	rows, _ := search.Prepare(msg.Req, m.sv.work, msg.Rows)
+	rows, droppedTitle := search.Prepare(msg.Req, m.sv.work, msg.Rows)
 	for j := range rows {
 		if hash, ok := m.resolved[rows[j].Key()]; ok && rows[j].Hash == "" {
 			rows[j].Hash = hash
 		}
 	}
+	m.sv.tally.Received += len(msg.Rows)
+	if droppedTitle > 0 {
+		m.addDrop(search.DropTitle, droppedTitle)
+	}
 	run.count += len(rows)
-	keep := m.selectedKey()
-	m.sv.rows = search.Merge(append(m.sv.rows, rows...))
-	m.queueBadges(rows)
-	m.sortReleases(keep)
-	return tea.Batch(m.settleReleases(), m.pumpResolves(false), m.pumpBadges())
+	return m.afterIndexerReply(rows)
 }
 
-// settleReleases says so once every indexer has answered with nothing.
-func (m *AppModel) settleReleases() tea.Cmd {
-	for _, r := range m.sv.runs {
-		if r.pending > 0 {
-			return nil
+func (m *AppModel) afterIndexerReply(rows []search.Result) tea.Cmd {
+	if m.sv.drawn {
+		var cmd tea.Cmd
+		if len(rows) > 0 {
+			cmd = m.mergeLate(rows)
 		}
+		m.maybeLogSummary()
+		m.checkEmpty()
+		return cmd
 	}
-	if len(m.sv.rows) == 0 && !m.sv.isErr {
-		m.sv.status, m.sv.isErr = "No releases found. Try ctrl+r with different words.", true
+	if len(rows) > 0 {
+		m.sv.pool = search.Merge(append(m.sv.pool, rows...))
+	}
+	if m.allAnswered() {
+		cmd := m.drawReleases()
+		m.maybeLogSummary()
+		m.checkEmpty()
+		return cmd
+	}
+	if !m.sv.settleArmed && m.answeredCount() > 0 {
+		m.sv.settleArmed = true
+		seq := m.sv.seq
+		return m.tick(settleWait, func(time.Time) tea.Msg {
+			return searchSettleMsg{Seq: seq}
+		})
 	}
 	return nil
+}
+
+func (m *AppModel) onSettle() tea.Cmd {
+	if m.sv.drawn {
+		return nil
+	}
+	return m.drawReleases()
+}
+
+func (m *AppModel) drawReleases() tea.Cmd {
+	m.sv.drawn = true
+	m.sv.prefs = m.searchPrefs()
+	m.sv.tally.Merged = len(m.sv.pool)
+	lib := m.libraryHashes()
+	kept, dropped := search.Drop(m.sv.pool, func(hash string) bool {
+		_, ok := lib[hash]
+		return ok
+	})
+	m.sv.pool = nil
+	for reason, n := range dropped {
+		m.addDrop(reason, n)
+	}
+	m.sv.sections = search.Arrange(kept, m.caps(), false, m.sv.prefs)
+	m.queueBadges(m.shownRows())
+	return tea.Batch(m.pumpResolves(false), m.pumpBadges())
+}
+
+func (m *AppModel) mergeLate(rows []search.Result) tea.Cmd {
+	lib := m.libraryHashes()
+	kept, dropped := search.Drop(rows, func(hash string) bool {
+		_, ok := lib[hash]
+		return ok
+	})
+	for reason, n := range dropped {
+		m.addDrop(reason, n)
+	}
+	var fresh []search.Result
+	for _, r := range kept {
+		if r.Hash != "" && m.addIndexersByHash(r.Hash, r.Indexers) {
+			continue
+		}
+		fresh = append(fresh, r)
+	}
+	if len(fresh) == 0 {
+		return nil
+	}
+	m.sv.prefs = m.searchPrefs()
+	caps := m.caps()
+	fresh = search.Merge(fresh)
+
+	lateIdx := -1
+	for i := range m.sv.sections {
+		if m.sv.sections[i].Late {
+			lateIdx = i
+			break
+		}
+	}
+	var newlyShown []search.Result
+	if lateIdx < 0 {
+		sec, ok := search.ArrangeLate(fresh, caps, m.sv.prefs)
+		if !ok {
+			return nil
+		}
+		m.sv.tally.Late += len(sec.Rows)
+		m.sv.sections = append(m.sv.sections, sec)
+		newlyShown = sec.Rows[:sec.Shown]
+	} else {
+		sec := &m.sv.sections[lateIdx]
+		prevShown := min(sec.Shown, len(sec.Rows))
+		keptShown := slices.Clone(sec.Rows[:prevShown])
+		pool := search.Merge(append(slices.Clone(sec.Rows[prevShown:]), fresh...))
+		rest, ok := search.ArrangeLate(pool, caps, m.sv.prefs)
+		if !ok {
+			return nil
+		}
+		for _, r := range fresh {
+			if caps[search.GroupOf(r.Media)] > 0 {
+				m.sv.tally.Late++
+			}
+		}
+		newCap := max(prevShown, min(search.LateCap, prevShown+len(rest.Rows)))
+		newlyShown = rest.Rows[:newCap-prevShown]
+		sec.Rows = append(keptShown, rest.Rows...)
+		sec.Shown = newCap
+	}
+	m.queueBadges(newlyShown)
+	return tea.Batch(m.pumpResolves(false), m.pumpBadges())
+}
+
+func (m *AppModel) checkEmpty() {
+	if len(m.shownRows()) == 0 && !m.sv.isErr {
+		m.sv.status, m.sv.isErr = "No releases found. Try ctrl+r with different words.", true
+	}
+}
+
+func (m *AppModel) maybeLogSummary() {
+	if m.sv.loggedSummary || !m.allAnswered() || m.logger == nil {
+		return
+	}
+	m.sv.loggedSummary = true
+	m.logger.Debug("search summary", m.sv.tally.Attrs(m.sv.sections)...)
+}
+
+func (m AppModel) answeredCount() int {
+	n := 0
+	for _, r := range m.sv.runs {
+		if r.pending == 0 {
+			n++
+		}
+	}
+	return n
+}
+
+func (m AppModel) allAnswered() bool {
+	return len(m.sv.runs) > 0 && m.answeredCount() == len(m.sv.runs)
+}
+
+func (m *AppModel) addDrop(reason search.DropReason, n int) {
+	if n <= 0 {
+		return
+	}
+	if m.sv.tally.Dropped == nil {
+		m.sv.tally.Dropped = map[search.DropReason]int{}
+	}
+	m.sv.tally.Dropped[reason] += n
+}
+
+func (m AppModel) searchPrefs() search.Prefs {
+	var groups []string
+	if m.cfg != nil {
+		groups = m.cfg.Search.PreferredGroups
+	}
+	if m.sv.raw {
+		return search.Prefs{Groups: groups}
+	}
+	return search.Prefs{
+		Language: m.sv.work.Language,
+		Episode:  m.sv.work.Kind == search.Show && m.sv.work.Episode > 0,
+		Groups:   groups,
+	}
+}
+
+func (m AppModel) caps() map[search.Group]int {
+	if m.searchCaps != nil {
+		return m.searchCaps
+	}
+	return search.DefaultCaps()
+}
+
+func (m *AppModel) addIndexersByHash(hash string, indexers []string) bool {
+	for si := range m.sv.sections {
+		for ri := range m.sv.sections[si].Rows {
+			if m.sv.sections[si].Rows[ri].Hash == hash {
+				appendMissingIndexers(&m.sv.sections[si].Rows[ri].Indexers, indexers)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func appendMissingIndexers(dst *[]string, add []string) {
+	for _, name := range add {
+		if !slices.Contains(*dst, name) {
+			*dst = append(*dst, name)
+		}
+	}
 }
 
 // pumpResolves starts what the resolver allows; the row under the cursor
@@ -463,7 +670,7 @@ func (m *AppModel) pumpResolves(force bool) tea.Cmd {
 	}
 	var cmds []tea.Cmd
 	seq, ctx := m.sv.seq, m.sv.ctx
-	for _, row := range m.sv.resolver.Next(m.sv.rows, want, force) {
+	for _, row := range m.sv.resolver.Next(m.shownRows(), want, force) {
 		m.sv.resolving[row.Key()] = true
 		cmds = append(cmds, func() tea.Msg {
 			hash, err := row.Resolve(ctx)
@@ -479,50 +686,94 @@ func (m *AppModel) takeResolved(msg searchResolvedMsg) tea.Cmd {
 	delete(m.sv.resolving, key)
 	var addCmd tea.Cmd
 	if msg.Err != nil || msg.Hash == "" {
-		m.sv.dropped += m.dropRows(func(r search.Result) bool {
-			return r.Key() == key || (r.Pending() && !m.sv.resolving[r.Key()] && m.sv.resolver.Limited(r.IndexerID))
-		})
+		dropped := 0
+		for i := range m.sv.sections {
+			sec := &m.sv.sections[i]
+			if sec.Remove(key) {
+				dropped++
+			}
+			for j := 0; j < min(sec.Shown, len(sec.Rows)); {
+				r := sec.Rows[j]
+				if r.Pending() && !m.sv.resolving[r.Key()] && m.sv.resolver.Limited(r.IndexerID) {
+					if sec.Remove(r.Key()) {
+						dropped++
+						continue
+					}
+				}
+				j++
+			}
+		}
+		m.pruneEmptySections()
+		m.addDrop(search.DropUnresolved, dropped)
 		if m.sv.addAfter == key {
 			m.sv.addAfter = ""
 			m.sv.status, m.sv.isErr = "Couldn't get a magnet for that release", true
 		}
 	} else {
 		m.resolved[key] = msg.Hash
-		found := false
-		for i := range m.sv.rows {
-			if m.sv.rows[i].Key() == key {
-				m.sv.rows[i].Hash = msg.Hash
-				found = true
-			}
-		}
+		row, found := m.mergeResolvedHash(key, msg.Hash)
 		if !found {
 			return tea.Batch(m.pumpResolves(false), m.pumpBadges())
 		}
-		m.sv.rows = search.Merge(m.sv.rows)
-		row := msg.Row
-		row.Hash = msg.Hash
 		m.queueBadges([]search.Result{row})
 		if m.sv.addAfter == key {
 			m.sv.addAfter = ""
 			addCmd = m.chooseRelease(row)
 		}
 	}
-	m.sortReleases(keep)
+	m.syncSearchCursor(keep)
 	return tea.Batch(addCmd, m.pumpResolves(false), m.pumpBadges())
 }
 
-func (m *AppModel) dropRows(drop func(search.Result) bool) int {
-	kept := m.sv.rows[:0]
-	n := 0
-	for _, r := range m.sv.rows {
-		if drop(r) {
-			n++
-			continue
+func (m *AppModel) mergeResolvedHash(key, hash string) (search.Result, bool) {
+	var resolvedRow search.Result
+	found := false
+	for si := range m.sv.sections {
+		for ri := range m.sv.sections[si].Rows {
+			if m.sv.sections[si].Rows[ri].Key() == key {
+				m.sv.sections[si].Rows[ri].Hash = hash
+				resolvedRow = m.sv.sections[si].Rows[ri]
+				found = true
+			}
 		}
-		kept = append(kept, r)
 	}
-	m.sv.rows = kept
-	return n
+	if !found {
+		return search.Result{}, false
+	}
+	type pos struct{ sec, row int }
+	var first *pos
+	for si := range m.sv.sections {
+		sec := &m.sv.sections[si]
+		for ri := 0; ri < min(sec.Shown, len(sec.Rows)); {
+			if sec.Rows[ri].Hash != hash {
+				ri++
+				continue
+			}
+			if first == nil {
+				first = &pos{si, ri}
+				ri++
+				continue
+			}
+			dst := &m.sv.sections[first.sec].Rows[first.row]
+			appendMissingIndexers(&dst.Indexers, sec.Rows[ri].Indexers)
+			if sec.Rows[ri].Key() == key {
+				resolvedRow = *dst
+			}
+			sec.Remove(sec.Rows[ri].Key())
+		}
+	}
+	m.pruneEmptySections()
+	return resolvedRow, true
+}
+
+func (m *AppModel) pruneEmptySections() {
+	kept := m.sv.sections[:0]
+	for _, sec := range m.sv.sections {
+		if len(sec.Rows) > 0 {
+			kept = append(kept, sec)
+		}
+	}
+	m.sv.sections = kept
 }
 
 // queueBadges hands the checker every hash it can't answer yet. A hash in
@@ -595,13 +846,7 @@ func (m AppModel) badgeFor(r search.Result, lib map[string]int) search.Badge {
 	}
 }
 
-// sortReleases re-sorts the rows and keeps the cursor on the same release.
-// sortReleases re-sorts and puts the cursor back on keep, the row that was
-// selected before the rows changed. With keep gone, the cursor stays put.
-func (m *AppModel) sortReleases(keep string) {
-	sec := search.Section{Rows: m.sv.rows, Shown: len(m.sv.rows)}
-	sec.Order(m.sv.sortKey, search.Prefs{})
-	m.sv.rows = sec.Rows
+func (m *AppModel) syncSearchCursor(keep string) {
 	rows := m.visibleReleases()
 	m.sv.cursor = min(m.sv.cursor, max(len(rows)-1, 0))
 	for i, r := range rows {
@@ -613,13 +858,23 @@ func (m *AppModel) sortReleases(keep string) {
 	m.clampSearchScroll(len(rows))
 }
 
+func (m AppModel) shownRows() []search.Result {
+	var out []search.Result
+	for _, sec := range m.sv.sections {
+		limit := min(sec.Shown, len(sec.Rows))
+		out = append(out, sec.Rows[:limit]...)
+	}
+	return out
+}
+
 func (m AppModel) visibleReleases() []search.Result {
+	shown := m.shownRows()
 	q := strings.ToLower(strings.TrimSpace(m.sv.filter.Value()))
 	if q == "" {
-		return m.sv.rows
+		return shown
 	}
 	var out []search.Result
-	for _, r := range m.sv.rows {
+	for _, r := range shown {
 		if strings.Contains(strings.ToLower(r.Title), q) {
 			out = append(out, r)
 		}
@@ -798,10 +1053,10 @@ func (m AppModel) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		default:
 			var cmd tea.Cmd
 			m.sv.filter, cmd = m.sv.filter.Update(msg)
-			m.sortReleases(keep)
+			m.syncSearchCursor(keep)
 			return m, cmd
 		}
-		m.sortReleases(keep)
+		m.syncSearchCursor(keep)
 		return m, nil
 	}
 
@@ -816,7 +1071,12 @@ func (m AppModel) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 	case "O":
 		m.sv.sortKey = m.sv.sortKey.Next()
-		m.sortReleases(m.selectedKey())
+		keep := m.selectedKey()
+		m.sv.prefs = m.searchPrefs()
+		for i := range m.sv.sections {
+			m.sv.sections[i].Order(m.sv.sortKey, m.sv.prefs)
+		}
+		m.syncSearchCursor(keep)
 		return m, nil
 	case "up", "k":
 		m.moveSearchCursor(-1, len(m.visibleReleases()))
@@ -938,14 +1198,21 @@ func (m AppModel) searchSummary() string {
 			parts = append(parts, fmt.Sprintf("%s ✓ %d", r.name, r.count))
 		}
 	}
-	if m.sv.dropped > 0 {
-		parts = append(parts, fmt.Sprintf("%d couldn't be resolved", m.sv.dropped))
+	if unresolved := m.sv.tally.Dropped[search.DropUnresolved]; unresolved > 0 {
+		parts = append(parts, fmt.Sprintf("%d couldn't be resolved", unresolved))
 	}
 	parts = append(parts, "sort: "+m.sv.sortKey.String())
 	return strings.Join(parts, " · ")
 }
 
 func (m AppModel) renderReleases() string {
+	if !m.sv.drawn {
+		if len(m.sv.runs) > 0 {
+			muted := lipgloss.NewStyle().Foreground(ColorSubtext0)
+			return "  " + muted.Render(fmt.Sprintf("Searching… %d of %d indexers", m.answeredCount(), len(m.sv.runs))) + "\n"
+		}
+		return ""
+	}
 	rows := m.visibleReleases()
 	lib := m.libraryHashes()
 	var sb strings.Builder
