@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -154,4 +155,14 @@ func TestTraktCatalogFailure_KeepsTheCatalogAlreadyLoaded(t *testing.T) {
 
 	percent, _ := next.(AppModel).resumeFor(matcher.ParseMedia("Test.Feature.Alpha.2023.1080p.mkv"))
 	assert.Equal(t, 41.0, percent)
+}
+
+func TestAddAndDelete_WithoutTorBoxKeyReturnStatusError(t *testing.T) {
+	t.Setenv("TORBOX_API_KEY", "")
+	m := testModelWith(t, func(c *config.Config) { c.TorBox.APIKey = "" })
+	require.Nil(t, m.torboxClient)
+
+	want := StatusMsg{Text: "TorBox API key not configured", IsErr: true}
+	assert.Equal(t, want, m.addDownloadCmd("magnet:?xt=urn:btih:"+strings.Repeat("a", 40))())
+	assert.Equal(t, want, m.deleteItemCmd(LibraryItem{ID: 1, Category: TabTorrents})())
 }

@@ -1490,6 +1490,9 @@ func playbackFinished(exe string, tail *outputTail) func(error) tea.Msg {
 
 func (m AppModel) deleteItemCmd(item LibraryItem) tea.Cmd {
 	return func() tea.Msg {
+		if m.torboxClient == nil {
+			return StatusMsg{Text: "TorBox API key not configured", IsErr: true}
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -1551,6 +1554,9 @@ func (m AppModel) controlCurrentItemCmd() tea.Cmd {
 
 func (m AppModel) addDownloadCmd(link string) tea.Cmd {
 	return func() tea.Msg {
+		if m.torboxClient == nil {
+			return StatusMsg{Text: "TorBox API key not configured", IsErr: true}
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
