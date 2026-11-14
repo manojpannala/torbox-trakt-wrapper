@@ -91,8 +91,8 @@ func TestPlayerExec_CancellingTheContextEndsTheSession(t *testing.T) {
 	go func() { done <- e.Run() }()
 
 	select {
-	case <-done:
-		t.Fatal("playback returned before the context was cancelled")
+	case err := <-done:
+		t.Fatalf("playback returned before the context was cancelled: %v", err)
 	case <-time.After(50 * time.Millisecond):
 	}
 
