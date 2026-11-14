@@ -1,8 +1,10 @@
 package prowlarr_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -277,4 +279,63 @@ func TestErrors_TheKeyNeverAppears(t *testing.T) {
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), testKey)
 	assert.NotContains(t, prowlarr.Describe(err), testKey)
+}
+
+func TestLogging_SearchAndResolveWithoutSecrets(t *testing.T) {
+	f := newFake(t, "")
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	c, err := prowlarr.New(f.URL, testKey, prowlarr.WithLogger(log))
+	require.NoError(t, err)
+
+	rows, err := c.Search(context.Background(), search.Request{IndexerID: 1, Type: "search", Query: "Sample"})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+
+	line := buf.String()
+	assert.Contains(t, line, "prowlarr request")
+	assert.Contains(t, line, "path=/api/v1/search")
+	assert.Contains(t, line, "status=200")
+	assert.Contains(t, line, "results=2")
+	assert.Contains(t, line, "query=Sample")
+	assert.NotContains(t, line, testKey)
+	assert.NotContains(t, line, "X-Api-Key")
+
+	// Resolve outcomes: magnet, not-magnet, rate-limited.
+	var mode string
+	f.download = func(w http.ResponseWriter, r *http.Request) {
+		switch mode {
+		case "magnet":
+			http.Redirect(w, r, "magnet:?xt=urn:btih:"+sampleHex, http.StatusFound)
+		case "not-magnet":
+			w.WriteHeader(http.StatusOK)
+		case "rate-limited":
+			w.WriteHeader(http.StatusTooManyRequests)
+		}
+	}
+
+	for _, m := range []string{"magnet", "not-magnet", "rate-limited"} {
+		buf.Reset()
+		mode = m
+		_, _ = rows[1].Resolve(context.Background())
+		out := buf.String()
+		assert.Contains(t, out, "prowlarr resolve")
+		assert.Contains(t, out, "indexer=General")
+		assert.Contains(t, out, "outcome="+m)
+		assert.NotContains(t, out, "/1/download")
+		assert.NotContains(t, out, testKey)
+		assert.NotContains(t, out, "magnet:")
+		assert.NotContains(t, out, sampleHex)
+	}
+
+	// 429 on search logs status=429.
+	srv429 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv429.Close()
+	buf.Reset()
+	c429, err := prowlarr.New(srv429.URL, testKey, prowlarr.WithLogger(log))
+	require.NoError(t, err)
+	_, _ = c429.Search(context.Background(), search.Request{IndexerID: 1, Type: "search", Query: "Sample"})
+	assert.Contains(t, buf.String(), "status=429")
 }

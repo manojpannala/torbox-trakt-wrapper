@@ -32,16 +32,20 @@ type IDs struct {
 
 // Movie represents movie metadata from Trakt.
 type Movie struct {
-	Title string `json:"title"`
-	Year  int    `json:"year"`
-	IDs   IDs    `json:"ids"`
+	Title     string   `json:"title"`
+	Year      int      `json:"year"`
+	Language  string   `json:"language,omitempty"`
+	Languages []string `json:"languages,omitempty"`
+	IDs       IDs      `json:"ids"`
 }
 
 // Show represents TV show metadata from Trakt.
 type Show struct {
-	Title string `json:"title"`
-	Year  int    `json:"year,omitempty"`
-	IDs   IDs    `json:"ids"`
+	Title     string   `json:"title"`
+	Year      int      `json:"year,omitempty"`
+	Language  string   `json:"language,omitempty"`
+	Languages []string `json:"languages,omitempty"`
+	IDs       IDs      `json:"ids"`
 }
 
 // Season represents a TV season.

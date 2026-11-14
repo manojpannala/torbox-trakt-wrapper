@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -43,11 +44,24 @@ func (e *UnreachableError) Is(target error) bool {
 	return target == search.ErrUnreachable
 }
 
+// Option configures a Client.
+type Option func(*Client)
+
+// WithLogger sends debug request and resolve logs to l. Nil is ignored.
+func WithLogger(l *slog.Logger) Option {
+	return func(c *Client) {
+		if l != nil {
+			c.logger = l
+		}
+	}
+}
+
 // Client is a search.Searcher backed by Prowlarr.
 type Client struct {
 	base   *url.URL
 	apiKey string
 	http   *http.Client
+	logger *slog.Logger
 	// download matches the path of Prowlarr's own download links.
 	download *regexp.Regexp
 }
@@ -56,7 +70,7 @@ var _ search.Searcher = (*Client)(nil)
 
 // New checks rawURL and returns a client for it. The client never follows
 // redirects: a download link's redirect is read, not fetched.
-func New(rawURL, apiKey string) (*Client, error) {
+func New(rawURL, apiKey string, opts ...Option) (*Client, error) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, fmt.Errorf("prowlarr_url %q is not an http(s) URL", logging.Redact(rawURL))
@@ -66,9 +80,10 @@ func New(rawURL, apiKey string) (*Client, error) {
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
 	u.RawQuery, u.Fragment, u.User = "", "", nil
-	return &Client{
+	c := &Client{
 		base:     u,
 		apiKey:   apiKey,
+		logger:   slog.New(slog.DiscardHandler),
 		download: regexp.MustCompile(`^` + regexp.QuoteMeta(u.Path) + `/\d+/download$`),
 		http: &http.Client{
 			Timeout: search.SearchTimeout + 5*time.Second,
@@ -76,7 +91,11 @@ func New(rawURL, apiKey string) (*Client, error) {
 				return http.ErrUseLastResponse
 			},
 		},
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c, nil
 }
 
 func isLoopback(host string) bool {
@@ -109,7 +128,9 @@ func (c *Client) Indexers(ctx context.Context) ([]search.Indexer, error) {
 	defer cancel()
 
 	var list []indexerResource
-	if err := c.get(ctx, "/api/v1/indexer", nil, &list); err != nil {
+	status, dur, err := c.get(ctx, "/api/v1/indexer", nil, &list)
+	c.logRequest("/api/v1/indexer", nil, status, dur, -1)
+	if err != nil {
 		return nil, err
 	}
 	out := make([]search.Indexer, 0, len(list))
@@ -179,7 +200,9 @@ func (c *Client) Search(ctx context.Context, req search.Request) ([]search.Resul
 	}
 
 	var releases []release
-	if err := c.get(ctx, "/api/v1/search", q, &releases); err != nil {
+	status, dur, err := c.get(ctx, "/api/v1/search", q, &releases)
+	if err != nil {
+		c.logRequest("/api/v1/search", q, status, dur, 0)
 		return nil, err
 	}
 	out := make([]search.Result, 0, len(releases))
@@ -203,10 +226,12 @@ func (c *Client) Search(ctx context.Context, req search.Request) ([]search.Resul
 			if !c.ownsDownload(link) {
 				continue
 			}
-			res.Resolve = func(ctx context.Context) (string, error) { return c.resolve(ctx, link) }
+			indexer := r.Indexer
+			res.Resolve = func(ctx context.Context) (string, error) { return c.resolve(ctx, indexer, link) }
 		}
 		out = append(out, res)
 	}
+	c.logRequest("/api/v1/search", q, status, dur, len(out))
 	return out, nil
 }
 
@@ -219,8 +244,19 @@ func (c *Client) ownsDownload(link string) bool {
 		c.download.MatchString(u.Path)
 }
 
-func (c *Client) resolve(ctx context.Context, link string) (string, error) {
+func (c *Client) resolve(ctx context.Context, indexer, link string) (string, error) {
+	start := time.Now()
+	outcome := "error"
+	defer func() {
+		c.logger.Debug("prowlarr resolve",
+			slog.String("indexer", indexer),
+			slog.String("outcome", outcome),
+			slog.Duration("duration", time.Since(start)),
+		)
+	}()
+
 	if !c.ownsDownload(link) {
+		outcome = "not-magnet"
 		return "", search.ErrNotMagnet
 	}
 	ctx, cancel := context.WithTimeout(ctx, search.ResolveTimeout)
@@ -233,7 +269,11 @@ func (c *Client) resolve(ctx context.Context, link string) (string, error) {
 	req.Header.Set("X-Api-Key", c.apiKey)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", c.transportErr(ctx)
+		tErr := c.transportErr(ctx)
+		if errors.Is(tErr, context.DeadlineExceeded) {
+			outcome = "timeout"
+		}
+		return "", tErr
 	}
 	_ = resp.Body.Close()
 
@@ -242,49 +282,73 @@ func (c *Client) resolve(ctx context.Context, link string) (string, error) {
 		loc := resp.Header.Get("Location")
 		if strings.HasPrefix(loc, "magnet:") {
 			if h := search.HashFromMagnet(loc); h != "" {
+				outcome = "magnet"
 				return h, nil
 			}
 		}
+		outcome = "not-magnet"
 		return "", search.ErrNotMagnet
 	case http.StatusUnauthorized:
 		return "", search.ErrUnauthorized
 	case http.StatusTooManyRequests:
+		outcome = "rate-limited"
 		return "", search.ErrRateLimited
 	default:
+		outcome = "not-magnet"
 		return "", search.ErrNotMagnet
 	}
 }
 
-func (c *Client) get(ctx context.Context, path string, q url.Values, target any) error {
+func (c *Client) get(ctx context.Context, path string, q url.Values, target any) (int, time.Duration, error) {
 	u := *c.base
 	u.Path += path
 	u.RawQuery = q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return fmt.Errorf("building prowlarr request: %w", err)
+		return 0, 0, fmt.Errorf("building prowlarr request: %w", err)
 	}
 	req.Header.Set("X-Api-Key", c.apiKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "torbox-trakt-wrapper/"+config.Version)
 
+	start := time.Now()
 	resp, err := c.http.Do(req)
+	dur := time.Since(start)
 	if err != nil {
-		return c.transportErr(ctx)
+		return 0, dur, c.transportErr(ctx)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return search.ErrUnauthorized
+		return resp.StatusCode, dur, search.ErrUnauthorized
 	case resp.StatusCode == http.StatusTooManyRequests:
-		return search.ErrRateLimited
+		return resp.StatusCode, dur, search.ErrRateLimited
 	case resp.StatusCode != http.StatusOK:
-		return fmt.Errorf("prowlarr %s answered %d", path, resp.StatusCode)
+		return resp.StatusCode, dur, fmt.Errorf("prowlarr %s answered %d", path, resp.StatusCode)
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(target); err != nil {
-		return fmt.Errorf("decoding prowlarr %s: %w", path, err)
+		return resp.StatusCode, dur, fmt.Errorf("decoding prowlarr %s: %w", path, err)
 	}
-	return nil
+	return resp.StatusCode, dur, nil
+}
+
+func (c *Client) logRequest(path string, q url.Values, status int, dur time.Duration, results int) {
+	query := ""
+	if enc := q.Encode(); enc != "" {
+		query = logging.Redact("?" + enc)
+	}
+	attrs := []any{
+		slog.String("method", http.MethodGet),
+		slog.String("path", path),
+		slog.String("query", query),
+		slog.Int("status", status),
+		slog.Duration("duration", dur),
+	}
+	if results >= 0 {
+		attrs = append(attrs, slog.Int("results", results))
+	}
+	c.logger.Debug("prowlarr request", attrs...)
 }
 
 // transportErr reports a request that got no response. It never wraps the

@@ -133,7 +133,7 @@ func TestLookupIMDb_ReturnsTheWorkTheIDBelongsTo(t *testing.T) {
 	require.NotNil(t, hit)
 	assert.Equal(t, "show", hit.Kind)
 	assert.Equal(t, "Sample Show", hit.Title)
-	assert.Equal(t, "/search/imdb/tt0000002?type=movie,show", *gotPath)
+	assert.Equal(t, "/search/imdb/tt0000002?type=movie,show&extended=full", *gotPath)
 }
 
 func TestLookupIMDb_NilWhenTraktHasNoMatch(t *testing.T) {
@@ -144,4 +144,55 @@ func TestLookupIMDb_NilWhenTraktHasNoMatch(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Nil(t, hit)
+}
+
+func TestSearchTitles_SendsExtendedFullAndReadsLanguage(t *testing.T) {
+	body := `[
+	  {"type":"movie","movie":{"title":"Film One","year":2020,"language":"ta","languages":["ta","te"],"ids":{"trakt":1,"imdb":"tt0000001"}}},
+	  {"type":"movie","movie":{"title":"Film Two","year":2021,"languages":["te","ta"],"ids":{"trakt":2,"imdb":"tt0000002"}}},
+	  {"type":"show","show":{"title":"Show Three","year":2022,"ids":{"trakt":3,"imdb":"tt0000003"}}}
+	]`
+	var hitsCount int
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsCount++
+		gotPath = r.URL.String()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+	hits, err := client.SearchTitles(context.Background(), "film")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, hitsCount)
+	assert.Contains(t, gotPath, "extended=full")
+	require.Len(t, hits, 3)
+	assert.Equal(t, "ta", hits[0].Language)
+	assert.Equal(t, "te", hits[1].Language)
+	assert.Equal(t, "", hits[2].Language)
+}
+
+func TestLookupIMDb_SendsExtendedFullAndCarriesLanguage(t *testing.T) {
+	body := `[{"type":"movie","movie":{"title":"Sample Film","year":2014,"language":"ml","ids":{"trakt":1,"imdb":"tt0000001"}}}]`
+	server, gotPath := searchServer(t, body)
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+
+	hit, err := client.LookupIMDb(context.Background(), "tt0000001")
+
+	require.NoError(t, err)
+	require.NotNil(t, hit)
+	assert.Contains(t, *gotPath, "extended=full")
+	assert.Equal(t, "ml", hit.Language)
+}
+
+func TestSearchMovies_SendsNoExtendedParam(t *testing.T) {
+	server, gotPath := searchServer(t, vishwanathResult)
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+
+	_, err := client.SearchMovies(context.Background(), "Vishwanath and Sons", 2026)
+
+	require.NoError(t, err)
+	assert.NotContains(t, *gotPath, "extended=")
 }
