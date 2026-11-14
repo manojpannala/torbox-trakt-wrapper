@@ -1,6 +1,7 @@
 # ADR-0007: rank and cap search results before checking them, grouped by resolution
 
-- **Status:** Accepted and planned (amended 2026-11-14, see the end). Brainstormed and approved section by
+- **Status:** Accepted and shipped in **v0.7.0** on 2026-11-14 (PR #18),
+  amended before planning (see the end). Brainstormed and approved section by
   section on 2026-09-29.
 - **Date:** 2026-09-29
 - **Affects:** `pkg/search` (new `lang.go`; `rank.go` rewritten; `resolver.go`
