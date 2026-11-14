@@ -2,8 +2,6 @@
   [1] Torrents    [2] Usenet    [3] Web-DL                                                                              
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                                         
-                                                                                                                        
-                                                                                                                        
                                ╭────────────────────────────────────────────────────────╮                               
                                │                                                        │                               
                                │  Keyboard Shortcuts                                    │                               
@@ -20,7 +18,10 @@
                                │  s               Search Prowlarr for releases          │                               
                                │  S               Find other releases of this title     │                               
                                │  Ctrl+R (search) Search the words as typed             │                               
-                               │  O (search)      Change the release sort order         │                               
+                               │  O (search)      Order releases by rank, size or       │                               
+                               │  seeders                                               │                               
+                               │  c (search)      Show only cached releases             │                               
+                               │  m (search)      Show more releases in this group      │                               
                                │  d / x           Delete selected item                  │                               
                                │  r               Refresh library and Trakt history     │                               
                                │  p               Pause / resume active torrent         │                               
@@ -32,7 +33,6 @@
                                │    Press Esc or ? to Close                             │                               
                                │                                                        │                               
                                ╰────────────────────────────────────────────────────────╯                               
-                                                                                                                        
                                                                                                                         
                                                                                                                         
  Ready          [Enter] Stream  [f] Files  [/] Filter  [a] Add  [s] Search  [d] Delete  [A] Trakt  [?] Help  [q] Quit   

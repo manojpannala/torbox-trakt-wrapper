@@ -218,6 +218,8 @@ func hit(t *testing.T, m AppModel, k tea.KeyPressMsg) AppModel {
 
 var (
 	sKey     = tea.KeyPressMsg{Code: 's', Text: "s"}
+	cKey     = tea.KeyPressMsg{Code: 'c', Text: "c"}
+	mKey     = tea.KeyPressMsg{Code: 'm', Text: "m"}
 	capSKey  = tea.KeyPressMsg{Code: 'S', Text: "S"}
 	capOKey  = tea.KeyPressMsg{Code: 'O', Text: "O"}
 	rawKey   = tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
@@ -267,13 +269,13 @@ func TestSearch_TitleThenReleasesWithBadges(t *testing.T) {
 		"7 search Sample Film 2014",
 	}, fs.queries())
 	view := plain(m)
-	assert.Contains(t, view, "General ✓ 2 · IDs ✓ 0 · sort: rank")
+	assert.Contains(t, view, "General ✓ 2 · IDs ✓ 0 · order: rank")
 	assert.NotContains(t, view, "Other.Film", "the title filter drops a different film")
 	rows := m.shownRows()
 	require.Len(t, rows, 2)
 	assert.Equal(t, tuiHashB, rows[0].Hash, "rank puts 70-seeder B first")
-	assert.Contains(t, view, "● 1080p")
-	assert.Contains(t, view, "○ 2160p")
+	assert.Contains(t, view, "● -")
+	assert.Contains(t, view, "○ -")
 	assert.Contains(t, view, "bluray x264 GRP")
 	require.Len(t, fc.batches, 1, "one badge batch for both hashes")
 	assert.ElementsMatch(t, []string{tuiHashA, tuiHashB}, fc.batches[0])
@@ -395,7 +397,7 @@ func TestSearch_OCyclesTheSortAndSlashFilters(t *testing.T) {
 	m = hit(t, m, enterKey)
 
 	m = hit(t, m, capOKey)
-	assert.Contains(t, plain(m), "sort: size")
+	assert.Contains(t, plain(m), "order: size")
 	assert.Equal(t, tuiHashB, m.shownRows()[0].Hash, "the 9 GiB release is largest")
 
 	m = hit(t, m, slashKey)
@@ -447,7 +449,7 @@ func TestSearch_PendingRowResolvesThenEnterAddsAndSelectsIt(t *testing.T) {
 
 	m, walk := moveTo(t, m, func(r search.Result) bool { return r.GUID == "b" })
 	require.True(t, m.sv.resolving["1/b"], "the row under the cursor resolves")
-	assert.Contains(t, plain(m), "… 1080p")
+	assert.Contains(t, plain(m), "… -")
 	m, enter := sendKey(m, enterKey)
 	assert.Contains(t, plain(m), "Getting the magnet for that release…")
 	m = settle(t, m, tea.Batch(walk, enter))
@@ -465,7 +467,7 @@ func TestSearch_PendingRowResolvesThenEnterAddsAndSelectsIt(t *testing.T) {
 	m = typeText(m, "tt0000001")
 	m = hit(t, m, enterKey)
 	assert.Equal(t, 1, resolves, "a resolved hash is remembered for the session")
-	assert.Contains(t, plain(m), "■ 1080p", "and it is now in the library")
+	assert.Contains(t, plain(m), "■ -", "and it is now in the library")
 }
 
 func TestSearch_EnterOnALibraryHashSelectsTheExistingRow(t *testing.T) {
@@ -482,7 +484,7 @@ func TestSearch_EnterOnALibraryHashSelectsTheExistingRow(t *testing.T) {
 
 	m, walk := moveTo(t, m, func(r search.Result) bool { return r.Hash == tuiHashB })
 	m = settle(t, m, walk)
-	assert.Contains(t, plain(m), "■ 2160p")
+	assert.Contains(t, plain(m), "■ -")
 	m = hit(t, m, enterKey)
 
 	assert.Equal(t, ViewLibrary, m.activeView)
@@ -502,13 +504,13 @@ func TestSearch_ARateLimitedBadgeCheckWaitsThenRetries(t *testing.T) {
 	m = settle(t, m, cmd, func(m AppModel) {
 		if strings.Contains(plain(m), "rate-limiting badge checks, retrying in 1m0s") {
 			sawWait = true
-			assert.Contains(t, plain(m), "? 1080p", "a limited check leaves the badge unknown")
+			assert.Contains(t, plain(m), "? -", "a limited check leaves the badge unknown")
 		}
 	})
 
 	assert.True(t, sawWait, "the wait is shown")
 	assert.Len(t, fc.batches, 2, "one retry, after the wait")
-	assert.Contains(t, plain(m), "● 1080p")
+	assert.Contains(t, plain(m), "● -")
 	assert.NotContains(t, plain(m), "rate-limiting")
 }
 
@@ -757,4 +759,167 @@ func TestSearch_SUsesTraktLanguageToRankReleases(t *testing.T) {
 	rows := m.visibleReleases()
 	require.Len(t, rows, 2)
 	assert.Equal(t, hTa, rows[0].Hash)
+}
+
+func TestSearch_ShowsResolutionHeadersAndLanguageColumn(t *testing.T) {
+	m, fs, _ := searchModel(t, nil)
+	hTa := strings.Repeat("c", 40)
+	fs.rows[1] = []search.Result{
+		{Title: "Sample.Film.2014.2160p.WEB-DL.Tamil-GRP", Hash: hTa, Size: 6 << 30, Seeders: 15, Indexers: []string{"General"}, IndexerID: 1, GUID: "ta"},
+	}
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	view := plain(m)
+	assert.Contains(t, view, "── 4K · 1 of 1 ──")
+	assert.Contains(t, view, "TAM")
+	assert.NotContains(t, view, "○ 2160p")
+	headerIdx := strings.Index(view, "── 4K · 1 of 1 ──")
+	rowIdx := strings.Index(view, "Sample.Film.2014.2160p")
+	require.NotEqual(t, -1, headerIdx)
+	require.NotEqual(t, -1, rowIdx)
+	assert.Less(t, headerIdx, rowIdx)
+	assert.NotContains(t, ansi.Strip(viewText(m)), "○ 2160p")
+}
+
+func TestSearch_CursorSkipsSectionHeadersAndStaysAtEnds(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	require.Equal(t, 0, m.sv.cursor)
+	m = hit(t, m, upKey)
+	assert.Equal(t, 0, m.sv.cursor, "Up on first row stays put")
+
+	m = hit(t, m, downKey)
+	assert.Equal(t, 1, m.sv.cursor, "Down from 4K row lands on 1080p row")
+	sel := m.selectedRelease()
+	require.NotNil(t, sel)
+	assert.Equal(t, tuiHashA, sel.Hash)
+
+	m = hit(t, m, downKey)
+	assert.Equal(t, 1, m.sv.cursor, "Down on last row stays put")
+}
+
+func TestSearch_CachedToggleHidesUncachedAndShowsEmptyMessage(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	m = hit(t, m, cKey)
+	view := plain(m)
+	assert.Contains(t, view, "── 1080p · 1 of 1 ──")
+	assert.NotContains(t, view, "── 4K ·", "4K only has an uncached release")
+
+	m = hit(t, m, cKey)
+	assert.Contains(t, plain(m), "── 4K · 1 of 1 ──", "second c shows uncached again")
+
+	// With only uncached rows, c shows the empty cached message.
+	m2, fs, _ := searchModel(t, nil)
+	fs.rows[1] = []search.Result{
+		{Title: "Sample.Film.2014.2160p-GRP", Hash: tuiHashB, Size: 5 << 30, Seeders: 20, Indexers: []string{"General"}, IndexerID: 1, GUID: "b"},
+	}
+	m2, _ = sendKey(m2, sKey)
+	m2 = typeText(m2, "tt0000001")
+	m2 = hit(t, m2, enterKey)
+	m2 = hit(t, m2, cKey)
+	assert.Contains(t, plain(m2), "No shown release is cached yet. Press c to show all.")
+}
+
+func TestSearch_MoreRevealsNextBatchAndQueuesBadges(t *testing.T) {
+	m, fs, fc := searchModel(t, nil)
+	fs.rows[1] = nil
+	for i := range 15 {
+		fs.rows[1] = append(fs.rows[1], search.Result{
+			Title:     fmt.Sprintf("Sample.Film.2014.1080p-G%02d", i),
+			Hash:      fmt.Sprintf("%040x", i+10),
+			Size:      2 << 30,
+			Seeders:   100 - i,
+			Indexers:  []string{"General"},
+			IndexerID: 1,
+			GUID:      fmt.Sprintf("g%02d", i),
+		})
+	}
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+	require.Len(t, fc.batches, 1)
+	assert.Len(t, fc.batches[0], 10)
+	assert.Contains(t, plain(m), "── 1080p · 10 of 15 ──")
+
+	m = hit(t, m, mKey)
+	assert.Len(t, m.shownRows(), 15)
+	assert.Contains(t, plain(m), "── 1080p · 15 of 15 ──")
+	require.Len(t, fc.batches, 2)
+	assert.Len(t, fc.batches[1], 5)
+
+	m = hit(t, m, mKey)
+	assert.Contains(t, m.sv.status, "No more releases in this group")
+}
+
+func TestSearch_OrderSortsShownRowsWithoutPullingHiddenRows(t *testing.T) {
+	m, fs, _ := searchModel(t, nil)
+	fs.rows[1] = nil
+	var hiddenLargest string
+	for i := range 12 {
+		hash := fmt.Sprintf("%040x", i+1)
+		size := int64(2+i) << 30
+		seeders := 100 - i
+		if i == 11 {
+			size = 50 << 30
+			seeders = 1
+			hiddenLargest = hash
+		}
+		fs.rows[1] = append(fs.rows[1], search.Result{
+			Title:     fmt.Sprintf("Sample.Film.2014.1080p-G%02d", i),
+			Hash:      hash,
+			Size:      size,
+			Seeders:   seeders,
+			Indexers:  []string{"General"},
+			IndexerID: 1,
+			GUID:      fmt.Sprintf("g%02d", i),
+		})
+	}
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	m = hit(t, m, capOKey)
+	assert.Contains(t, plain(m), "order: size")
+	rows := m.shownRows()
+	require.Len(t, rows, 10)
+	assert.GreaterOrEqual(t, rows[0].Size, rows[len(rows)-1].Size)
+	for _, r := range rows {
+		assert.NotEqual(t, hiddenLargest, r.Hash, "hidden 50 GiB row does not enter section on O")
+	}
+}
+
+func TestSearch_FilterHidesEmptyHeaders(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	m = hit(t, m, slashKey)
+	m = typeText(m, "1080p")
+	m = hit(t, m, enterKey)
+	view := plain(m)
+	assert.Contains(t, view, "── 1080p · 1 of 1 ──")
+	assert.NotContains(t, view, "── 4K ·")
+}
+
+func TestSearch_FooterFitsAtWidth80(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m.width = 80
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m = hit(t, m, enterKey)
+
+	footer := ansi.Strip(m.renderFooter())
+	assert.NotContains(t, footer, "\n", "footer stays one line at width 80")
+	assert.Contains(t, footer, "[Enter] Add")
+	assert.Contains(t, footer, "[Esc] Back")
 }

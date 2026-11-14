@@ -78,6 +78,7 @@ type searchView struct {
 	tally         search.Tally
 	settleArmed   bool
 	loggedSummary bool
+	cachedOnly    bool
 	resolver      *search.Resolver
 	resolving     map[string]bool
 	addAfter      string
@@ -377,6 +378,7 @@ func (m AppModel) handleSearchMsg(msg tea.Msg) (AppModel, tea.Cmd, bool) {
 		return m, m.pumpBadges(), true
 
 	case badgeCheckedMsg:
+		keep := m.selectedKey()
 		now := m.clock()
 		switch {
 		case msg.Err == nil:
@@ -388,6 +390,9 @@ func (m AppModel) handleSearchMsg(msg tea.Msg) (AppModel, tea.Cmd, bool) {
 		default:
 			m.checker.Failed()
 			m.badgeNote = "Badge check failed, so some badges show ?"
+		}
+		if m.sv.cachedOnly {
+			m.syncSearchCursor(keep)
 		}
 		return m, m.pumpBadges(), true
 	}
@@ -867,19 +872,83 @@ func (m AppModel) shownRows() []search.Result {
 	return out
 }
 
-func (m AppModel) visibleReleases() []search.Result {
-	shown := m.shownRows()
-	q := strings.ToLower(strings.TrimSpace(m.sv.filter.Value()))
-	if q == "" {
-		return shown
+func (m AppModel) isRowVisible(r search.Result, lib map[string]int, q string) bool {
+	if m.sv.cachedOnly {
+		b := m.badgeFor(r, lib)
+		if b != search.BadgeCached && b != search.BadgeInLibrary {
+			return false
+		}
 	}
-	var out []search.Result
-	for _, r := range shown {
-		if strings.Contains(strings.ToLower(r.Title), q) {
-			out = append(out, r)
+	if q != "" && !strings.Contains(strings.ToLower(r.Title), q) {
+		return false
+	}
+	return true
+}
+
+type visibleSection struct {
+	idx  int
+	sec  search.Section
+	rows []search.Result
+}
+
+func (m AppModel) visibleSections() []visibleSection {
+	lib := m.libraryHashes()
+	q := strings.ToLower(strings.TrimSpace(m.sv.filter.Value()))
+	out := make([]visibleSection, 0, len(m.sv.sections))
+	for si, sec := range m.sv.sections {
+		limit := min(sec.Shown, len(sec.Rows))
+		var rows []search.Result
+		for _, r := range sec.Rows[:limit] {
+			if m.isRowVisible(r, lib, q) {
+				rows = append(rows, r)
+			}
+		}
+		if len(rows) > 0 {
+			out = append(out, visibleSection{idx: si, sec: sec, rows: rows})
 		}
 	}
 	return out
+}
+
+func (m AppModel) visibleReleases() []search.Result {
+	var out []search.Result
+	for _, vs := range m.visibleSections() {
+		out = append(out, vs.rows...)
+	}
+	return out
+}
+
+func (m AppModel) cursorSectionIdx() (int, bool) {
+	pos := 0
+	for _, vs := range m.visibleSections() {
+		if m.sv.cursor >= pos && m.sv.cursor < pos+len(vs.rows) {
+			return vs.idx, true
+		}
+		pos += len(vs.rows)
+	}
+	return 0, false
+}
+
+func (m *AppModel) showMoreInSection() tea.Cmd {
+	secIdx, ok := m.cursorSectionIdx()
+	if !ok {
+		return nil
+	}
+	sec := &m.sv.sections[secIdx]
+	step := m.caps()[sec.Group]
+	if sec.Late {
+		step = search.LateCap
+	}
+	added := sec.More(step)
+	if len(added) == 0 {
+		m.sv.status, m.sv.isErr = "No more releases in this group", false
+		return nil
+	}
+	m.sv.status = ""
+	keep := m.selectedKey()
+	m.queueBadges(added)
+	m.syncSearchCursor(keep)
+	return tea.Batch(m.pumpResolves(false), m.pumpBadges())
 }
 
 func (m AppModel) selectedKey() string {
@@ -1078,6 +1147,13 @@ func (m AppModel) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.syncSearchCursor(keep)
 		return m, nil
+	case "c":
+		keep := m.selectedKey()
+		m.sv.cachedOnly = !m.sv.cachedOnly
+		m.syncSearchCursor(keep)
+		return m, nil
+	case "m":
+		return m, m.showMoreInSection()
 	case "up", "k":
 		m.moveSearchCursor(-1, len(m.visibleReleases()))
 		return m, m.pumpResolves(false)
@@ -1118,6 +1194,17 @@ func (m AppModel) searchLines() int {
 
 func (m *AppModel) clampSearchScroll(n int) {
 	lines := m.searchLines()
+	if m.sv.stage == stageReleases && m.sv.drawn {
+		cursorLine, anchorLine, totalLines := m.releaseScrollBounds()
+		if anchorLine < m.sv.top {
+			m.sv.top = anchorLine
+		}
+		if cursorLine >= m.sv.top+lines {
+			m.sv.top = cursorLine - lines + 1
+		}
+		m.sv.top = max(0, min(m.sv.top, max(totalLines-lines, 0)))
+		return
+	}
 	if m.sv.cursor < m.sv.top {
 		m.sv.top = m.sv.cursor
 	}
@@ -1125,6 +1212,27 @@ func (m *AppModel) clampSearchScroll(n int) {
 		m.sv.top = m.sv.cursor - lines + 1
 	}
 	m.sv.top = max(0, min(m.sv.top, max(n-lines, 0)))
+}
+
+func (m AppModel) releaseScrollBounds() (cursorLine, anchorLine, totalLines int) {
+	rowIdx := 0
+	lineIdx := 0
+	for _, vs := range m.visibleSections() {
+		headerLine := lineIdx
+		lineIdx++
+		for ri := range vs.rows {
+			if rowIdx == m.sv.cursor {
+				cursorLine = lineIdx
+				anchorLine = lineIdx
+				if ri == 0 {
+					anchorLine = headerLine
+				}
+			}
+			rowIdx++
+			lineIdx++
+		}
+	}
+	return cursorLine, anchorLine, lineIdx
 }
 
 func (m AppModel) renderSearch() string {
@@ -1201,50 +1309,66 @@ func (m AppModel) searchSummary() string {
 	if unresolved := m.sv.tally.Dropped[search.DropUnresolved]; unresolved > 0 {
 		parts = append(parts, fmt.Sprintf("%d couldn't be resolved", unresolved))
 	}
-	parts = append(parts, "sort: "+m.sv.sortKey.String())
+	parts = append(parts, "order: "+m.sv.sortKey.String())
 	return strings.Join(parts, " · ")
 }
 
 func (m AppModel) renderReleases() string {
+	muted := lipgloss.NewStyle().Foreground(ColorSubtext0)
 	if !m.sv.drawn {
 		if len(m.sv.runs) > 0 {
-			muted := lipgloss.NewStyle().Foreground(ColorSubtext0)
 			return "  " + muted.Render(fmt.Sprintf("Searching… %d of %d indexers", m.answeredCount(), len(m.sv.runs))) + "\n"
 		}
 		return ""
 	}
-	rows := m.visibleReleases()
-	lib := m.libraryHashes()
-	var sb strings.Builder
-	end := min(m.sv.top+m.searchLines(), len(rows))
-	for i := m.sv.top; i < end; i++ {
-		r := rows[i]
-		cursor, style := "  ", m.theme.ItemTitle
-		if i == m.sv.cursor {
-			cursor, style = "❯ ", m.theme.ItemSelected
-		}
-		media := releaseMedia(r)
-		name := r.Title
-		if r.Pack {
-			name += " [pack]"
-		}
-		if avail := m.width - 60; avail > 10 {
-			name = truncateToWidth(name, avail)
-		}
-		line := fmt.Sprintf("%s%s %-6s %s %5d  %s  %s",
-			cursor, m.badgeFor(r, lib), dashIfEmpty(r.Media.Resolution),
-			m.theme.ItemSize.Render(fmt.Sprintf("%9s", formatBytes(r.Size))), r.Seeders,
-			padToWidth(truncateToWidth(media, 24), 24), style.Render(name))
-		sb.WriteString(line)
-		sb.WriteString("\n")
+	sections := m.visibleSections()
+	if len(sections) == 0 && m.sv.cachedOnly {
+		return "  " + muted.Render("No shown release is cached yet. Press c to show all.") + "\n"
 	}
-	return sb.String()
+	lib := m.libraryHashes()
+	var lines []string
+	rowIdx := 0
+	for _, vs := range sections {
+		title := vs.sec.Group.Header()
+		if vs.sec.Late {
+			title = "Late results"
+		}
+		lines = append(lines, "  "+muted.Render(fmt.Sprintf("── %s · %d of %d ──", title, len(vs.rows), len(vs.sec.Rows))))
+		for _, r := range vs.rows {
+			cursor, style := "  ", m.theme.ItemTitle
+			if rowIdx == m.sv.cursor {
+				cursor, style = "❯ ", m.theme.ItemSelected
+			}
+			media := releaseMedia(r, vs.sec.Late)
+			name := r.Title
+			if r.Pack {
+				name += " [pack]"
+			}
+			if avail := m.width - 60; avail > 10 {
+				name = truncateToWidth(name, avail)
+			}
+			lines = append(lines, fmt.Sprintf("%s%s %-5s %s %5d  %s  %s",
+				cursor, m.badgeFor(r, lib), dashIfEmpty(r.Lang.Label()),
+				m.theme.ItemSize.Render(fmt.Sprintf("%9s", formatBytes(r.Size))), r.Seeders,
+				padToWidth(truncateToWidth(media, 24), 24), style.Render(name)))
+			rowIdx++
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	start := min(m.sv.top, len(lines))
+	end := min(start+m.searchLines(), len(lines))
+	return strings.Join(lines[start:end], "\n") + "\n"
 }
 
 // releaseMedia is what ParsedMedia knows about a release beyond its
-// resolution: source, codec, HDR, audio and group.
-func releaseMedia(r search.Result) string {
+// resolution: source, codec, HDR, audio and group (plus resolution for late rows).
+func releaseMedia(r search.Result, includeRes bool) string {
 	var parts []string
+	if includeRes && r.Media.Resolution != "" {
+		parts = append(parts, r.Media.Resolution)
+	}
 	for _, s := range []string{r.Media.Source, r.Media.Codec, r.Media.HDR, r.Media.Audio, r.Media.ReleaseGroup} {
 		if s != "" {
 			parts = append(parts, s)
@@ -1253,7 +1377,17 @@ func releaseMedia(r search.Result) string {
 	return strings.Join(parts, " ")
 }
 
-func (m AppModel) searchShortcuts() string {
+var releaseHints = []footerHint{
+	{"[Enter] Add", 0},
+	{"[c] Cached", 4},
+	{"[m] More", 3},
+	{"[/] Filter", 5},
+	{"[O] Order", 2},
+	{"[s] New search", 1},
+	{"[Esc] Back", 0},
+}
+
+func (m AppModel) searchShortcuts(width int) string {
 	switch m.sv.stage {
 	case stageQuery:
 		return "[Enter] Search  [ctrl+r] Raw search  [Esc] Close"
@@ -1262,7 +1396,7 @@ func (m AppModel) searchShortcuts() string {
 	case stageEpisode:
 		return "[Enter] Search  [Esc] Back"
 	}
-	return "[Enter] Add  [/] Filter  [O] Sort  [s] New search  [Esc] Back"
+	return fitHints(releaseHints, width)
 }
 
 func titleYear(title string, year int) string {

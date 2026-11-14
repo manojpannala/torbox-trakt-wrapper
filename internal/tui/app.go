@@ -1119,10 +1119,10 @@ func (m AppModel) renderFooter() string {
 		status = m.theme.StatusError.Render("✖ " + status)
 	}
 
-	shortcuts := m.searchShortcuts()
-	if m.activeView != ViewSearch {
+	shortcuts := fitHints(libraryHints, m.width-lipgloss.Width(status)-6)
+	if m.activeView == ViewSearch {
 		// The padding, the margin and a two-column gap after the status.
-		shortcuts = fitHints(libraryHints, m.width-lipgloss.Width(status)-6)
+		shortcuts = m.searchShortcuts(m.width - lipgloss.Width(status) - 6)
 	}
 
 	gap := max(m.width-lipgloss.Width(status)-lipgloss.Width(shortcuts)-4, 0)
