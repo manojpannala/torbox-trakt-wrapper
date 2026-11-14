@@ -1,6 +1,6 @@
 # ADR-0007: rank and cap search results before checking them, grouped by resolution
 
-- **Status:** Accepted, not yet planned. Brainstormed and approved section by
+- **Status:** Accepted and planned (amended 2026-11-14, see the end). Brainstormed and approved section by
   section on 2026-09-29.
 - **Date:** 2026-09-29
 - **Affects:** `pkg/search` (new `lang.go`; `rank.go` rewritten; `resolver.go`
@@ -284,3 +284,16 @@ All of this lives in `pkg/search` and is shared by the TUI and the CLI.
   wrong audio can't be watched, whereas an unknown encoder can. Revisit if the
   maintainer finds a trusted group's release sitting below a random one in the
   right language.
+
+## Amendments before planning (2026-11-14)
+
+- **Original language comes from Trakt's `language` field,** falling back to
+  the first entry of `languages`. `language` is the original language, so the
+  first open question no longer decides anything. A real regional response
+  still gets checked in the release's manual check. SPEC FR-3.6.3.
+- **No second Trakt lookup.** `S` on a library row and a typed IMDb ID
+  already make one `/search/imdb/{id}` lookup for the title before the
+  releases step. It now asks for `extended=full` and carries the language.
+  Section 3's "runs alongside the indexer requests" is dropped. SPEC FR-3.6.8.
+- **A single episode is read from the parse,** not the search kind, so a raw
+  search doesn't judge episodes by film floors and ceilings. SPEC FR-3.6.2.
