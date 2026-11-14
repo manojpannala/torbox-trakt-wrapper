@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -278,4 +280,57 @@ func TestClient_LogsARejectedTokenRefresh(t *testing.T) {
 	assert.Contains(t, logs.String(), "status 401")
 	assert.NotContains(t, logs.String(), "revoked-refresh-token")
 	assert.NotContains(t, logs.String(), "revoked-access-token")
+}
+
+func TestClient_ConcurrentRequestsRefreshExpiredTokenOnce(t *testing.T) {
+	var refreshes atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/oauth/token" {
+			refreshes.Add(1)
+			time.Sleep(50 * time.Millisecond)
+			createdAt := strconv.FormatInt(time.Now().Unix(), 10)
+			_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":7776000,"refresh_token":"refreshed-refresh","created_at":` + createdAt + `}`))
+			return
+		}
+		if r.URL.Path == "/sync/playback" {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := trakt.NewClient("cid", "csecret",
+		trakt.WithBaseURL(server.URL),
+		trakt.WithTokens(trakt.TokenResponse{
+			AccessToken:  "expired-access",
+			RefreshToken: "expired-refresh",
+			ExpiresIn:    10,
+			CreatedAt:    1,
+		}),
+	)
+
+	const workers = 5
+	errs := make([]error, workers)
+	start := make(chan struct{})
+	var ready, wg sync.WaitGroup
+	ready.Add(workers)
+	wg.Add(workers)
+	for i := range workers {
+		go func(idx int) {
+			defer wg.Done()
+			ready.Done()
+			<-start
+			_, errs[idx] = client.GetPlayback(context.Background())
+		}(i)
+	}
+	ready.Wait()
+	close(start)
+	wg.Wait()
+
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int32(1), refreshes.Load())
 }

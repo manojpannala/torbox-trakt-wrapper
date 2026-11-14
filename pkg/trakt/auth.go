@@ -164,12 +164,15 @@ func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*TokenR
 	return &tokens, nil
 }
 
-func (c *Client) refreshTokenInternal(ctx context.Context) error {
+func (c *Client) refreshTokenInternal(ctx context.Context, seen string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.tokens.RefreshToken == "" {
 		return errors.New("no refresh token available")
+	}
+	if c.tokens.RefreshToken != seen {
+		return nil
 	}
 
 	payload, err := json.Marshal(map[string]string{

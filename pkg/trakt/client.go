@@ -197,6 +197,12 @@ func (c *Client) Tokens() TokenResponse {
 	return c.tokens
 }
 
+func (c *Client) refreshTokenValue() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.tokens.RefreshToken
+}
+
 // SetTokens updates the current tokens.
 func (c *Client) SetTokens(tokens TokenResponse) {
 	c.mu.Lock()
@@ -235,8 +241,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	}
 
 	// Proactive token refresh if auth is required and token is expired/near expiry
-	if requiresAuth && c.IsTokenExpired() && c.tokens.RefreshToken != "" {
-		if err := c.refreshTokenInternal(ctx); err != nil {
+	if seen := c.refreshTokenValue(); requiresAuth && c.IsTokenExpired() && seen != "" {
+		if err := c.refreshTokenInternal(ctx, seen); err != nil {
 			// If proactive refresh fails, we will still attempt the request or return error
 			c.logger.Warn("trakt token refresh failed", "err", logging.Redact(err.Error()))
 		}
@@ -298,8 +304,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	}
 
 	// Reactive token refresh on 401
-	if statusCode == http.StatusUnauthorized && requiresAuth && c.tokens.RefreshToken != "" {
-		if refreshErr := c.refreshTokenInternal(ctx); refreshErr == nil {
+	if seen := c.refreshTokenValue(); statusCode == http.StatusUnauthorized && requiresAuth && seen != "" {
+		if refreshErr := c.refreshTokenInternal(ctx, seen); refreshErr == nil {
 			// Retry once with new token
 			statusCode, respBody, err = executeReq()
 			if err != nil {
