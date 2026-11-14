@@ -146,6 +146,28 @@ cached, `■` already in your library, `…` still getting its magnet, `?` unkno
 Cached checks are batched and paced to stay well under TorBox's rate limit, so
 badges can take a moment to fill in.
 
+Results are grouped by resolution (`4K`, `1080p`, `720p` by default), with dead,
+cam/telesync and implausibly small releases dropped. Each group shows its top
+picks ranked by the title's original language, your preferred groups,
+easy-to-stream encodes and then seeders, and only shown releases are checked
+with TorBox. The list draws once all indexers answer (or after 5 seconds), and
+any slow indexers arriving afterwards go under "Late results".
+
+```toml
+[search]
+preferred_groups = [] # release groups to rank first, e.g. ["GRP"]
+
+[search.resolutions] # groups to show, and how many of each
+"2160p" = 10
+"1080p" = 10
+"720p" = 5
+unknown = 5
+```
+
+Leaving `[search.resolutions]` out uses those defaults. When the table is
+present, it is the whole list (add `"480p" = 5` to bring 480p back). Caps run
+0–50.
+
 Search keeps nothing on disk. Cached answers (fresh for 15 minutes) and magnets
 already fetched live in memory until you quit, so repeating a search asks
 TorBox only about releases it hasn't checked recently.
@@ -154,7 +176,9 @@ TorBox only about releases it hasn't checked recently.
 | --- | --- |
 | <kbd>Enter</kbd> | Add the release to TorBox and jump to it in the library (or just jump, if it's already there) |
 | <kbd>/</kbd> | Filter the releases |
-| <kbd>O</kbd> | Sort by cached, size, seeders or resolution |
+| <kbd>c</kbd> | Show only cached releases |
+| <kbd>m</kbd> | Show more of this group |
+| <kbd>O</kbd> | Order by rank, size or seeders |
 | <kbd>s</kbd> | New search |
 | <kbd>Esc</kbd> | Back |
 
@@ -207,8 +231,10 @@ $XDG_STATE_HOME/torbox-trakt-wrapper/tt-wrapper.log   # ~/.local/state/... by de
 The file is created at `0600` and only when `--verbose` is passed — a normal run
 writes nothing. It records TorBox and Trakt API requests (method, path, status,
 duration), the flags `mpv` was launched with, and scrobble decisions. Trakt
-paths include the titles you searched for or played. Requests to Prowlarr are
-not logged here; Prowlarr keeps its own log.
+paths include the titles you searched for or played. Prowlarr requests and
+magnet lookups are logged too (path, status, timing, counts, never the API key
+or download links), and each search logs one summary line with counts per group
+and per drop reason, never release names.
 
 API keys and tokens are never written. Request bodies and headers are never
 logged, credential query parameters are blanked to `REDACTED` (TorBox's
@@ -268,6 +294,13 @@ compact_mode = false
 [search] # optional; see Search above
 prowlarr_url = ""
 prowlarr_api_key = ""
+preferred_groups = []
+
+[search.resolutions]
+"2160p" = 10
+"1080p" = 10
+"720p" = 5
+unknown = 5
 ```
 
 ### Environment Variables
