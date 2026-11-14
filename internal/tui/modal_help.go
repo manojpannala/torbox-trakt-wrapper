@@ -20,7 +20,7 @@ func renderHelpModal(theme Theme, width int) string {
 		{"s", "Search Prowlarr for releases"},
 		{"S", "Find other releases of this title"},
 		{"Ctrl+R (search)", "Search the words as typed"},
-		{"O (search)", "Order releases by rank, size or seeders"},
+		{"O (search)", "Order by rank, size or seeders"},
 		{"c (search)", "Show only cached releases"},
 		{"m (search)", "Show more releases in this group"},
 		{"d / x", "Delete selected item"},
