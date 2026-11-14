@@ -2,7 +2,6 @@ package search
 
 import (
 	"errors"
-	"sort"
 	"time"
 )
 
@@ -28,9 +27,10 @@ func NewResolver() *Resolver {
 	return &Resolver{tried: map[string]bool{}, limited: map[int]bool{}}
 }
 
-// Next returns the releases to resolve now. The ResolveUpFront best-seeded
-// go without asking; want, the row under the cursor, may take the total to
-// ResolveBudget; force, an Enter on want, resolves it whatever the budget.
+// Next returns the releases to resolve now. The first ResolveUpFront pending
+// rows in display order go without asking; want, the row under the cursor, may
+// take the total to ResolveBudget; force, an Enter on want, resolves it
+// whatever the budget.
 func (r *Resolver) Next(rows []Result, want string, force bool) []Result {
 	var out []Result
 	start := func(row Result) {
@@ -55,7 +55,6 @@ func (r *Resolver) Next(rows []Result, want string, force bool) []Result {
 		}
 	}
 
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].Seeders > candidates[j].Seeders })
 	for _, row := range candidates {
 		if r.inFlight >= ResolveParallel || r.started >= ResolveUpFront {
 			break

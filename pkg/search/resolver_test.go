@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,9 +35,10 @@ func finish(r *search.Resolver, rows []search.Result) {
 	}
 }
 
-func TestResolver_TwoAtATimeBestSeededFirst(t *testing.T) {
+func TestResolver_TwoAtATimeInDisplayOrder(t *testing.T) {
 	r := search.NewResolver()
 	rows := pending(5, 1)
+	slices.Reverse(rows)
 
 	first := r.Next(rows, "", false)
 
@@ -76,7 +78,7 @@ func TestResolver_TheCursorTakesTheBudgetToTwenty(t *testing.T) {
 	}
 
 	started := 0
-	for i := range 15 {
+	for i := 10; i < 25; i++ {
 		batch := r.Next(rows, rows[i].Key(), false)
 		started += len(batch)
 		finish(r, batch)
@@ -87,14 +89,14 @@ func TestResolver_TheCursorTakesTheBudgetToTwenty(t *testing.T) {
 func TestResolver_EnterResolvesPastTheBudget(t *testing.T) {
 	r := search.NewResolver()
 	rows := pending(30, 1)
-	for i := range 15 {
+	for i := range 20 {
 		finish(r, r.Next(rows, rows[i].Key(), false))
 	}
-	assert.Empty(t, r.Next(rows, rows[15].Key(), false), "the budget is spent")
+	assert.Empty(t, r.Next(rows, rows[20].Key(), false), "the budget is spent")
 
-	got := r.Next(rows, rows[15].Key(), true)
+	got := r.Next(rows, rows[20].Key(), true)
 
-	assert.Equal(t, []string{"g15"}, keys(got))
+	assert.Equal(t, []string{"g20"}, keys(got))
 }
 
 func TestResolver_NeverResolvesARowTwice(t *testing.T) {
@@ -123,4 +125,17 @@ func TestResolver_SkipsRowsThatAreNotPending(t *testing.T) {
 	rows := []search.Result{{GUID: "hashed", Hash: sampleHex, Resolve: pending(1, 1)[0].Resolve}, {GUID: "no-link"}}
 
 	assert.Empty(t, r.Next(rows, "", false))
+}
+
+func TestResolver_StartsPendingRowsInDisplayOrder(t *testing.T) {
+	r := search.NewResolver()
+	resolve := func(context.Context) (string, error) { return "", nil }
+	rows := []search.Result{
+		{GUID: "low", IndexerID: 1, Seeders: 5, Resolve: resolve},
+		{GUID: "high", IndexerID: 1, Seeders: 90, Resolve: resolve},
+	}
+
+	got := r.Next(rows, "", false)
+
+	assert.Equal(t, []string{"low", "high"}, keys(got))
 }
