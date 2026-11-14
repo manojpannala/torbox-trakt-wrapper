@@ -486,7 +486,9 @@ func (m *AppModel) afterIndexerReply(rows []search.Result) tea.Cmd {
 		m.checkEmpty()
 		return cmd
 	}
-	if !m.sv.settleArmed && m.answeredCount() > 0 {
+	// The wait starts with the first rows, so a fast failure can't draw an
+	// empty list and push every real result under Late results.
+	if !m.sv.settleArmed && len(m.sv.pool) > 0 {
 		m.sv.settleArmed = true
 		seq := m.sv.seq
 		return m.tick(settleWait, func(time.Time) tea.Msg {

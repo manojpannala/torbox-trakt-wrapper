@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -578,6 +579,39 @@ func TestSearch_ShowsPendingCounterUntilAllAnswer(t *testing.T) {
 	require.Len(t, m.sv.sections, 2)
 	assert.Equal(t, search.Group4K, m.sv.sections[0].Group)
 	assert.Equal(t, search.Group1080p, m.sv.sections[1].Group)
+}
+
+func TestSearch_AFailedFirstAnswerDoesNotStartTheSettleWait(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m, _ = sendKey(m, sKey)
+	m = typeText(m, "tt0000001")
+	m, cmd := sendKey(m, enterKey)
+	m, cmd = sendMsg(m, cmd())
+	m, cmd = sendMsg(m, cmd())
+	m, _ = sendMsg(m, cmd())
+
+	m, _ = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 1, Indexer: "General"},
+		Err: errors.New("indexer down"),
+	})
+	assert.False(t, m.sv.settleArmed, "an answer with no rows has nothing to draw")
+
+	m, cmd = sendMsg(m, searchReleasesMsg{
+		Seq: m.sv.seq,
+		Req: search.Request{IndexerID: 7, Indexer: "IDs", ByID: true},
+		Rows: []search.Result{
+			{Title: "Sample.Film.2014.2160p-GRP", Hash: tuiHashB, Size: 5 << 30, Seeders: 10, Indexers: []string{"IDs"}, IndexerID: 7, GUID: "b"},
+		},
+	})
+	require.True(t, m.sv.settleArmed)
+	require.False(t, m.sv.drawn)
+	m, _ = sendMsg(m, cmd())
+
+	require.True(t, m.sv.drawn)
+	require.Len(t, m.sv.sections, 1)
+	assert.Equal(t, search.Group4K, m.sv.sections[0].Group)
+	assert.False(t, m.sv.sections[0].Late)
 }
 
 func TestSearch_SettleTimeoutDrawsThenLateResultsAppend(t *testing.T) {
