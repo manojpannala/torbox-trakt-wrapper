@@ -232,8 +232,9 @@ The file is created at `0600` and only when `--verbose` is passed — a normal r
 writes nothing. It records TorBox and Trakt API requests (method, path, status,
 duration), the flags `mpv` was launched with, and scrobble decisions. Trakt
 paths include the titles you searched for or played. Prowlarr requests and
-magnet lookups are logged too (path, status, timing, counts, never the API key
-or download links), and each search logs one summary line with counts per group
+magnet lookups are logged too (path, status, timing, counts and the words you
+searched for, never the API key or download links), and each search logs one
+summary line with counts per group
 and per drop reason, never release names.
 
 API keys and tokens are never written. Request bodies and headers are never
