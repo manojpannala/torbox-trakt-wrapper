@@ -957,3 +957,20 @@ func TestSearch_FooterFitsAtWidth80(t *testing.T) {
 	assert.Contains(t, footer, "[Enter] Add")
 	assert.Contains(t, footer, "[Esc] Back")
 }
+
+func TestSearch_AResolvedDuplicateKeepsTheBetterSeededCopy(t *testing.T) {
+	m, _, _ := searchModel(t, nil)
+	m.sv.sections = []search.Section{{Group: search.Group1080p, Shown: 2, Rows: []search.Result{
+		{Title: "Sample.Film.2014.1080p.x265-GRP", Hash: tuiHashA, Seeders: 5, Indexers: []string{"General"}, IndexerID: 1, GUID: "a"},
+		{Title: "Sample.Film.2014.1080p-GRP", Seeders: 50, Indexers: []string{"IDs"}, IndexerID: 7, GUID: "b"},
+	}}}
+
+	row, ok := m.mergeResolvedHash("7/b", tuiHashA)
+
+	require.True(t, ok)
+	shown := m.shownRows()
+	require.Len(t, shown, 1)
+	assert.Equal(t, 50, shown[0].Seeders)
+	assert.ElementsMatch(t, []string{"General", "IDs"}, shown[0].Indexers)
+	assert.Equal(t, shown[0], row)
+}

@@ -762,11 +762,18 @@ func (m *AppModel) mergeResolvedHash(key, hash string) (search.Result, bool) {
 				continue
 			}
 			dst := &m.sv.sections[first.sec].Rows[first.row]
-			appendMissingIndexers(&dst.Indexers, sec.Rows[ri].Indexers)
-			if sec.Rows[ri].Key() == key {
+			cur := sec.Rows[ri]
+			appendMissingIndexers(&dst.Indexers, cur.Indexers)
+			if cur.Seeders > dst.Seeders {
+				cur.Indexers = dst.Indexers
+				*dst = cur
+			}
+			if cur.Key() == key || dst.Key() == key {
 				resolvedRow = *dst
 			}
-			sec.Remove(sec.Rows[ri].Key())
+			// By index: after the copy above, dst may carry cur's key.
+			sec.Rows = slices.Delete(sec.Rows, ri, ri+1)
+			sec.Shown--
 		}
 	}
 	m.pruneEmptySections()
