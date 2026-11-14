@@ -143,7 +143,9 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 			}),
 			trakt.WithLogger(logger),
 			trakt.WithOnTokenRefreshed(func(tokens trakt.TokenResponse) {
-				_ = cfg.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn)
+				if err := cfg.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn); err != nil {
+					logger.Warn("saving refreshed trakt tokens failed", "err", err)
+				}
 			}),
 		)
 	}
@@ -382,11 +384,16 @@ func (m AppModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.Trakt.RefreshToken = msg.Token.RefreshToken
 		m.cfg.Trakt.TokenCreatedAt = msg.Token.CreatedAt
 		m.cfg.Trakt.TokenExpiresIn = msg.Token.ExpiresIn
-		_ = m.cfg.PersistTraktTokens(msg.Token.AccessToken, msg.Token.RefreshToken, msg.Token.CreatedAt, msg.Token.ExpiresIn)
+		persistErr := m.cfg.PersistTraktTokens(msg.Token.AccessToken, msg.Token.RefreshToken, msg.Token.CreatedAt, msg.Token.ExpiresIn)
 		m.activeModal = ModalNone
 		m.resumePrompt = nil
-		m.statusText = "Successfully paired with Trakt.tv!"
-		m.isStatusErr = false
+		if persistErr != nil {
+			m.statusText = "Paired with Trakt, but the tokens couldn't be saved: " + persistErr.Error()
+			m.isStatusErr = true
+		} else {
+			m.statusText = "Successfully paired with Trakt.tv!"
+			m.isStatusErr = false
+		}
 		m.store.Invalidate(cache.TraktCatalog)
 		m.matcher.UpdateCatalog(nil, nil, nil)
 		m.recalculateBadges()

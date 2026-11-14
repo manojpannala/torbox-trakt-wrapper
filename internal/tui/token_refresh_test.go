@@ -113,3 +113,35 @@ func TestRefetchTrakt_ConcurrentWithTokenPollSuccess_DoesNotRaceOnCfg(t *testing
 
 	<-done
 }
+
+func TestTokenPollSuccess_ReportsSaveFailureWithoutLeakingTokens(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	m := testModelWith(t, func(cfg *config.Config) {
+		require.NoError(t, cfg.SaveToFile(cfgPath))
+	})
+
+	require.NoError(t, os.Chmod(dir, 0o500)) // #nosec G302
+	t.Cleanup(func() {
+		_ = os.Chmod(dir, 0o700) // #nosec G302
+	})
+
+	nextModel, _ := m.Update(TokenPollSuccessMsg{
+		Token: &trakt.TokenResponse{
+			AccessToken:  "test-new-access",
+			RefreshToken: "test-new-refresh",
+			CreatedAt:    time.Now().Unix(),
+			ExpiresIn:    7776000,
+		},
+	})
+	updated := nextModel.(AppModel)
+
+	assert.True(t, updated.isStatusErr)
+	assert.Contains(t, updated.statusText, "Paired with Trakt, but the tokens couldn't be saved")
+	assert.NotContains(t, updated.statusText, "test-new-access")
+	assert.NotContains(t, updated.statusText, "test-new-refresh")
+}

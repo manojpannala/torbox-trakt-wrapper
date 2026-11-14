@@ -42,7 +42,9 @@ var streamCmd = &cobra.Command{
 				}),
 				trakt.WithLogger(logger),
 				trakt.WithOnTokenRefreshed(func(tokens trakt.TokenResponse) {
-					_ = c.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn)
+					if err := c.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn); err != nil {
+						logger.Warn("saving refreshed trakt tokens failed", "err", err)
+					}
 				}),
 			)
 		}
