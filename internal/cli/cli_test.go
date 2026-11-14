@@ -324,3 +324,52 @@ func TestCLI_AuthTorBoxClearsOnlyTheTorBoxCache(t *testing.T) {
 	_, ok := cache.Read[[]string](store, cache.TraktCatalog)
 	assert.True(t, ok, "a new TorBox key says nothing about the Trakt account")
 }
+
+func TestCLI_ListPersistsRefreshedTraktTokens(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	tbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/torrents/mylist") {
+			_, _ = w.Write([]byte(`{"success": true, "data": []}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer tbServer.Close()
+
+	traktServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/oauth/token" {
+			_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":7776000,"refresh_token":"refreshed-refresh","created_at":1700000000}`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/sync/") {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer traktServer.Close()
+
+	t.Setenv("TORBOX_BASE_URL", tbServer.URL)
+	t.Setenv("TRAKT_BASE_URL", traktServer.URL)
+
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.DefaultConfig()
+	cfg.TorBox.APIKey = "dummy-api-key"
+	cfg.Trakt.ClientID = "test-client-id"
+	cfg.Trakt.ClientSecret = "test-client-secret"
+	cfg.Trakt.AccessToken = "expired-access"
+	cfg.Trakt.RefreshToken = "expired-refresh"
+	cfg.Trakt.TokenCreatedAt = 1
+	cfg.Trakt.TokenExpiresIn = 10
+	require.NoError(t, cfg.SaveToFile(cfgPath))
+
+	_, err := executeCommand("--config", cfgPath, "list", "torrents")
+	require.NoError(t, err)
+
+	loaded, err := config.LoadFromFile(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, "refreshed-refresh", loaded.Trakt.RefreshToken)
+}

@@ -58,6 +58,11 @@ var listCmd = &cobra.Command{
 					CreatedAt:    c.Trakt.TokenCreatedAt,
 					ExpiresIn:    c.Trakt.TokenExpiresIn,
 				}),
+				trakt.WithOnTokenRefreshed(func(tokens trakt.TokenResponse) {
+					if err := c.PersistTraktTokens(tokens.AccessToken, tokens.RefreshToken, tokens.CreatedAt, tokens.ExpiresIn); err != nil {
+						logger.Warn("saving refreshed trakt tokens failed", "err", err)
+					}
+				}),
 				trakt.WithLogger(logger),
 			)
 			movies, _ := trClient.GetWatchedMovies(ctx)
