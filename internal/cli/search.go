@@ -430,7 +430,9 @@ func (s cliSearch) resolveSections(ctx context.Context, sections []search.Sectio
 			} else {
 				first.Indexers = indexers
 			}
-			sec.Remove(cur.Key())
+			// By index: after the copy above, first may carry cur's key.
+			sec.Rows = slices.Delete(sec.Rows, i, i+1)
+			sec.Shown--
 		}
 	}
 	return unresolved
