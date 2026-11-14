@@ -106,9 +106,9 @@ func TestPrepare_FiltersTextResultsButNotIDOrRawResults(t *testing.T) {
 		{Title: "Unrelated.Name.2014.1080p-GRP"},
 	}
 
-	text := search.Prepare(search.Request{}, w, rows)
-	byID := search.Prepare(search.Request{ByID: true}, w, rows)
-	raw := search.Prepare(search.Request{Raw: true}, w, rows)
+	text, _ := search.Prepare(search.Request{}, w, rows)
+	byID, _ := search.Prepare(search.Request{ByID: true}, w, rows)
+	raw, _ := search.Prepare(search.Request{Raw: true}, w, rows)
 
 	require.Len(t, text, 1)
 	assert.Equal(t, "1080p", text[0].Media.Resolution)
@@ -119,7 +119,7 @@ func TestPrepare_FiltersTextResultsButNotIDOrRawResults(t *testing.T) {
 func TestPrepare_CleansReleaseNamesForDisplay(t *testing.T) {
 	rows := []search.Result{{Title: "Sample.Film.2014\x1b[31m.1080p-GRP"}}
 
-	got := search.Prepare(search.Request{Raw: true}, search.Work{}, rows)
+	got, _ := search.Prepare(search.Request{Raw: true}, search.Work{}, rows)
 
 	assert.NotContains(t, got[0].Title, "\x1b")
 }
@@ -127,7 +127,7 @@ func TestPrepare_CleansReleaseNamesForDisplay(t *testing.T) {
 func TestPrepare_MarksPacks(t *testing.T) {
 	w := search.Work{Kind: search.Show, Title: "Sample Show", Season: 2, Episode: 5}
 
-	got := search.Prepare(search.Request{}, w, []search.Result{{Title: "Sample.Show.S02.1080p-GRP"}})
+	got, _ := search.Prepare(search.Request{}, w, []search.Result{{Title: "Sample.Show.S02.1080p-GRP"}})
 
 	require.Len(t, got, 1)
 	assert.True(t, got[0].Pack)

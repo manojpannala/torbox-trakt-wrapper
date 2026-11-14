@@ -17,22 +17,24 @@ const maxLeftoverWords = 2
 var packSuffix = regexp.MustCompile(`^(.*?)\s+(?:s(\d{1,2})(?:\s+s(\d{1,2}))?|season\s+(\d{1,2})(?:\s+(\d{1,2}))?|(?:complete\s+)?series|complete)$`)
 
 // Prepare parses each release for req, drops text results that aren't for
-// w, marks season packs, and cleans the name for display.
-func Prepare(req Request, w Work, rows []Result) []Result {
-	out := make([]Result, 0, len(rows))
+// w, marks season packs, detects language tags, and cleans the name for display.
+func Prepare(req Request, w Work, rows []Result) (kept []Result, filtered int) {
+	kept = make([]Result, 0, len(rows))
 	for _, r := range rows {
 		r.Media = matcher.ParseMedia(r.Title)
 		r.Title = matcher.SanitizeDisplay(r.Title)
 		if !req.ByID && !req.Raw {
 			keep, pack := Keep(w, r.Media)
 			if !keep {
+				filtered++
 				continue
 			}
 			r.Pack = pack
 		}
-		out = append(out, r)
+		r.Lang = DetectLang(r.Media.OriginalName, r.Media.Year, req.Raw)
+		kept = append(kept, r)
 	}
-	return out
+	return kept, filtered
 }
 
 // Keep decides whether a text-search release is for w, and whether it is a

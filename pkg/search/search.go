@@ -23,12 +23,13 @@ const (
 // Work is what the releases are for: a Trakt hit, a library row, or a typed
 // IMDb ID. Season and Episode are zero for a whole show or season.
 type Work struct {
-	Kind    Kind
-	Title   string
-	Year    int
-	IMDbID  string
-	Season  int
-	Episode int
+	Kind     Kind
+	Title    string
+	Year     int
+	IMDbID   string
+	Language string
+	Season   int
+	Episode  int
 }
 
 // Indexer is one source a backend can search on its own.
@@ -63,6 +64,7 @@ type Result struct {
 	IndexerID int                 `json:"-"`
 	GUID      string              `json:"-"`
 	Pack      bool                `json:"pack,omitempty"`
+	Lang      Lang                `json:"-"`
 	Media     matcher.ParsedMedia `json:"-"`
 
 	Resolve func(ctx context.Context) (string, error) `json:"-"`

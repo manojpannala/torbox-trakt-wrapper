@@ -424,7 +424,7 @@ func (m *AppModel) takeReleases(msg searchReleasesMsg) tea.Cmd {
 		}
 		return m.settleReleases()
 	}
-	rows := search.Prepare(msg.Req, m.sv.work, msg.Rows)
+	rows, _ := search.Prepare(msg.Req, m.sv.work, msg.Rows)
 	for j := range rows {
 		if hash, ok := m.resolved[rows[j].Key()]; ok && rows[j].Hash == "" {
 			rows[j].Hash = hash

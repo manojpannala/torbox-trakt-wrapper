@@ -187,7 +187,7 @@ func (s cliSearch) releases(ctx context.Context, w *search.Work, text string) er
 				t.failed = err
 				return
 			}
-			got = search.Prepare(req, wk, got)
+			got, _ = search.Prepare(req, wk, got)
 			t.ok = true
 			t.count += len(got)
 			rows = append(rows, got...)
