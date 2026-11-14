@@ -1,6 +1,7 @@
 # ADR-0003: How the metadata cache is orchestrated, kept current and cleared
 
-- **Status:** Accepted
+- **Status:** Accepted and shipped in **v0.3.0** on 2026-09-26 (PR #1), with
+  follow-ups in v0.3.1 (PR #8).
 - **Date:** 2026-09-26
 - **Amends:** `0001-metadata-cache-interface.md` — its `Store` contract stands;
   this ADR changes the key set, the envelope and the write mechanics, and

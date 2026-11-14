@@ -1,6 +1,7 @@
 # ADR-0004: The playback monitor is driven by mpv property events, and scrobbles are coalesced
 
-- **Status:** Accepted
+- **Status:** Accepted and shipped in **v0.4.0** on 2026-09-27 (PR #9), with
+  follow-ups in v0.4.1 (PR #15).
 - **Date:** 2026-09-26
 - **Amends:** DESIGN §3 — drops the 15s watchdog (§3.2 item 4) and
   qualifies "reports both" (§3.3) with coalescing and spacing

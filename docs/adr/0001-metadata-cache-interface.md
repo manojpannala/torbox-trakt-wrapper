@@ -1,6 +1,7 @@
 # ADR-0001: The metadata cache is a concrete generic store behind a closed key set
 
-- **Status:** Accepted, **amended by `0003-cache-orchestration.md`** — read that
+- **Status:** Accepted and shipped in **v0.3.0** on 2026-09-26 (PR #1),
+  **amended by `0003-cache-orchestration.md`** — read that
   first. It renames `TraktWatched` to `TraktCatalog`, adds `Clear()`, adds a
   version to the envelope, and replaces the fixed-`.tmp` write with
   `os.CreateTemp`. The `Store` contract below otherwise stands.

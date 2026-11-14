@@ -1,6 +1,6 @@
 # ADR-0005: a renewing localhost stream proxy, and failures sorted by what the user can do
 
-- **Status:** Implemented. Released in **v0.5.0** on 2026-09-28 (PR #16).
+- **Status:** Accepted and shipped in **v0.5.0** on 2026-09-28 (PR #16).
 - **Date:** 2026-09-27
 - **Affects:** new `pkg/stream`; `internal/tui/app.go`, `types.go`, new
   `fetcherr.go`; `internal/cli/stream.go`; `pkg/config/config.go`;

@@ -1,6 +1,6 @@
 # ADR-0002: Resume positions are percentages, and resuming is offered, not assumed
 
-- **Status:** Accepted
+- **Status:** Accepted and shipped in **v0.3.0** on 2026-09-26.
 - **Date:** 2026-09-12
 - **Affects:** `pkg/player` (`MediaStream`, `mpv.go`), `internal/tui`
   (`app.go`, new `modal_resume.go`, `types.go`)

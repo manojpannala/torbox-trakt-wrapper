@@ -35,6 +35,19 @@ A high-performance terminal client and TUI for browsing, streaming, and managing
 
 ## 📦 Installation
 
+### Requirements
+
+- [mpv](https://mpv.io) on your `PATH` (or set `player.command`)
+- A TorBox account and API key
+- A Trakt account, optional, for watch history and scrobbling
+- Go 1.25 or newer, only to install or build from source
+
+### Prebuilt Binaries
+
+Download an archive for Linux, macOS or Windows (amd64 or arm64) from
+[GitHub Releases](https://github.com/manojpannala/torbox-trakt-wrapper/releases),
+check it against `checksums.txt`, and put `tt-wrapper` on your `PATH`.
+
 ### Go Install
 
 ```bash
@@ -54,18 +67,20 @@ make build
 
 ## 🚀 Quickstart
 
-1. **Launch the TUI**:
+1. **Set your TorBox API Key** (it prompts for the key, so it stays out of your shell history):
    ```bash
-   tt-wrapper
+   tt-wrapper auth torbox
    ```
-2. **Set your TorBox API Key**:
-   ```bash
-   tt-wrapper auth torbox <your_api_key>
-   ```
-3. **Pair your Trakt Account**:
-   Press <kbd>A</kbd> in the TUI or run:
+   This creates the config file if it doesn't exist. `tt-wrapper config init`
+   writes one with every default instead.
+2. **Pair your Trakt Account**:
    ```bash
    tt-wrapper auth trakt
+   ```
+   You can also press <kbd>A</kbd> in the TUI.
+3. **Launch the TUI**:
+   ```bash
+   tt-wrapper
    ```
 
 ---
@@ -169,6 +184,9 @@ tt-wrapper config init
 
 # Delete cached listings and watch history
 tt-wrapper cache clear
+
+# Print the version
+tt-wrapper version
 ```
 
 ### Global flags
@@ -242,7 +260,7 @@ scrobble_threshold_percent = 90
 keep_open = "" # "" leaves mpv.conf alone | "yes" | "no" | "always"
 stream_proxy = true # renew an expired TorBox link mid-stream; false hands mpv the link directly
 
-[ui]
+[ui] # not read yet; reserved for the theme work planned before v1.0.0
 theme = "catppuccin-mocha"
 show_unwatched_badge = false
 compact_mode = false
@@ -254,7 +272,7 @@ prowlarr_api_key = ""
 
 ### Environment Variables
 
-All settings can be overridden using environment variables:
+These environment variables override the matching settings in the file:
 - `TORBOX_API_KEY`
 - `TRAKT_CLIENT_ID`
 - `TRAKT_CLIENT_SECRET`
