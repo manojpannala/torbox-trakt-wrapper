@@ -599,8 +599,9 @@ func (m AppModel) badgeFor(r search.Result, lib map[string]int) search.Badge {
 // sortReleases re-sorts and puts the cursor back on keep, the row that was
 // selected before the rows changed. With keep gone, the cursor stays put.
 func (m *AppModel) sortReleases(keep string) {
-	lib := m.libraryHashes()
-	search.Sort(m.sv.rows, m.sv.sortKey, func(r search.Result) search.Badge { return m.badgeFor(r, lib) })
+	sec := search.Section{Rows: m.sv.rows, Shown: len(m.sv.rows)}
+	sec.Order(m.sv.sortKey, search.Prefs{})
+	m.sv.rows = sec.Rows
 	rows := m.visibleReleases()
 	m.sv.cursor = min(m.sv.cursor, max(len(rows)-1, 0))
 	for i, r := range rows {

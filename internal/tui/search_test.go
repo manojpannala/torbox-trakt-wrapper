@@ -267,10 +267,10 @@ func TestSearch_TitleThenReleasesWithBadges(t *testing.T) {
 		"7 search Sample Film 2014",
 	}, fs.queries())
 	view := plain(m)
-	assert.Contains(t, view, "General ✓ 2 · IDs ✓ 0 · sort: cached")
+	assert.Contains(t, view, "General ✓ 2 · IDs ✓ 0 · sort: rank")
 	assert.NotContains(t, view, "Other.Film", "the title filter drops a different film")
 	require.Len(t, m.sv.rows, 2)
-	assert.Equal(t, tuiHashA, m.sv.rows[0].Hash, "cached sorts first")
+	assert.Equal(t, tuiHashB, m.sv.rows[0].Hash, "rank puts 70-seeder B first")
 	assert.Contains(t, view, "● 1080p")
 	assert.Contains(t, view, "○ 2160p")
 	assert.Contains(t, view, "bluray x264 GRP")

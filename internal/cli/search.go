@@ -216,7 +216,9 @@ func (s cliSearch) releases(ctx context.Context, w *search.Work, text string) er
 			return search.BadgeUncached
 		}
 	}
-	search.Sort(rows, s.sortKey, badge)
+	sec := search.Section{Rows: rows, Shown: len(rows)}
+	sec.Order(s.sortKey, search.Prefs{})
+	rows = sec.Rows
 
 	if s.json {
 		out := make([]releaseJSON, 0, len(rows))

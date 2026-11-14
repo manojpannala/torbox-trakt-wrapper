@@ -136,11 +136,11 @@ func TestCLI_Search_ReleasesCarryBadgesAndMagnets(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	require.Len(t, lines, 4, "two releases, each with its magnet line:\n%s", out)
-	assert.Regexp(t, `^●\s+1080p\s+.*\s+40\s+\S*MovieIDs\S*\s+Sample\.Film\.2014\.1080p\.BluRay-GRP$`, lines[0], "A is cached, sorts first, and keeps its best-seeded name")
-	assert.Contains(t, lines[0], "General", "A's duplicate folds in its indexer")
-	assert.Equal(t, "magnet:?xt=urn:btih:"+cliHashA, strings.TrimSpace(lines[1]))
-	assert.Regexp(t, `^○\s+2160p\s+.*\s+70\s+General\s+Sample Film \(2014\) 2160p WEB-DL$`, lines[2], "B is resolved from its download link")
-	assert.Equal(t, "magnet:?xt=urn:btih:"+cliHashB, strings.TrimSpace(lines[3]))
+	assert.Regexp(t, `^○\s+2160p\s+.*\s+70\s+General\s+Sample Film \(2014\) 2160p WEB-DL$`, lines[0], "B is resolved from its download link and ranks first with 70 seeders")
+	assert.Equal(t, "magnet:?xt=urn:btih:"+cliHashB, strings.TrimSpace(lines[1]))
+	assert.Regexp(t, `^●\s+1080p\s+.*\s+40\s+\S*MovieIDs\S*\s+Sample\.Film\.2014\.1080p\.BluRay-GRP$`, lines[2], "A is cached and keeps its best-seeded name")
+	assert.Contains(t, lines[2], "General", "A's duplicate folds in its indexer")
+	assert.Equal(t, "magnet:?xt=urn:btih:"+cliHashA, strings.TrimSpace(lines[3]))
 	assert.NotContains(t, out, "Other Film", "the title filter drops a different film")
 	assert.ElementsMatch(t, []string{cliHashA, cliHashB}, *checked, "one badge batch for both hashes")
 }
