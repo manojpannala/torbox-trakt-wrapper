@@ -101,7 +101,12 @@ func TestTraktScrobbler_StartPauseStop(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := trakt.NewClient("cid", "csecret", trakt.WithBaseURL(server.URL))
+	client := trakt.NewClient(
+		"cid",
+		"csecret",
+		trakt.WithBaseURL(server.URL),
+		trakt.WithTokens(trakt.TokenResponse{AccessToken: "tok", ExpiresIn: 99999}),
+	)
 	scrobbler := player.NewTraktScrobbler(client)
 
 	mediaMovie := matcher.ParsedMedia{

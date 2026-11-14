@@ -211,3 +211,41 @@ func TestScrobbler_ResolvesShowIDsForAnEpisode(t *testing.T) {
 	ep := stub.scrobbleBody["episode"].(map[string]any)
 	assert.Equal(t, float64(4), ep["number"])
 }
+
+func TestScrobbler_RequiresAuthAndScrobblesAfterSetTokens(t *testing.T) {
+	var mu sync.Mutex
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests = append(requests, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/search/movie" {
+			_, _ = w.Write([]byte(searchHit))
+			return
+		}
+		_, _ = w.Write([]byte(`{"action":"start","progress":1}`))
+	}))
+	defer server.Close()
+
+	client := trakt.NewClient("cid", "secret", trakt.WithBaseURL(server.URL))
+	s := player.NewTraktScrobbler(client)
+	ctx := context.Background()
+
+	require.NoError(t, s.Start(ctx, vishwanath(), 1))
+	require.NoError(t, s.Pause(ctx, vishwanath(), 40))
+	resp, err := s.Stop(ctx, vishwanath(), 90)
+	require.NoError(t, err)
+	assert.Nil(t, resp)
+
+	mu.Lock()
+	assert.Empty(t, requests, "tokenless client must not send scrobble or search requests")
+	mu.Unlock()
+
+	client.SetTokens(trakt.TokenResponse{AccessToken: "tok", ExpiresIn: 99999})
+	require.NoError(t, s.Start(ctx, vishwanath(), 1))
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, requests, "/scrobble/start")
+}

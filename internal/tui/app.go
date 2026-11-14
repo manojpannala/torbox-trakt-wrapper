@@ -149,7 +149,7 @@ func NewAppModel(ctx context.Context, cfg *config.Config, opts ...AppOption) App
 	}
 
 	var scrobbler player.ScrobbleHandler
-	if trClient != nil && cfg.Trakt.HasAuth() {
+	if trClient != nil {
 		scrobbler = player.NewTraktScrobbler(trClient, player.WithScrobblerLogger(logger))
 	}
 

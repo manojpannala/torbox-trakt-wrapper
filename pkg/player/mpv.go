@@ -309,7 +309,7 @@ func sameItem(media matcher.ParsedMedia, title string, year int) bool {
 }
 
 func (s *TraktScrobbler) Start(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
-	if s.client == nil {
+	if s.client == nil || !s.client.HasAuth() {
 		return nil
 	}
 	req := buildScrobbleRequest(media, progress, s.resolve(ctx, media))
@@ -318,7 +318,7 @@ func (s *TraktScrobbler) Start(ctx context.Context, media matcher.ParsedMedia, p
 }
 
 func (s *TraktScrobbler) Pause(ctx context.Context, media matcher.ParsedMedia, progress float64) error {
-	if s.client == nil {
+	if s.client == nil || !s.client.HasAuth() {
 		return nil
 	}
 	req := buildScrobbleRequest(media, progress, s.resolve(ctx, media))
@@ -327,7 +327,7 @@ func (s *TraktScrobbler) Pause(ctx context.Context, media matcher.ParsedMedia, p
 }
 
 func (s *TraktScrobbler) Stop(ctx context.Context, media matcher.ParsedMedia, progress float64) (*trakt.ScrobbleResponse, error) {
-	if s.client == nil {
+	if s.client == nil || !s.client.HasAuth() {
 		return nil, nil
 	}
 	req := buildScrobbleRequest(media, progress, s.resolve(ctx, media))
