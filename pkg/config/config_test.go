@@ -401,3 +401,40 @@ func TestSearch_StringerHidesCredentialsInTheProwlarrURL(t *testing.T) {
 		assert.Contains(t, str, want, raw)
 	}
 }
+
+func TestSearch_LoadsGroupsAndResolutions(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	body := "[search]\npreferred_groups = [\"GRP\", \"enc\"]\n[search.resolutions]\n\"2160p\" = 8\n\"480p\" = 3\n"
+	require.NoError(t, os.WriteFile(configPath, []byte(body), 0o600))
+
+	cfg, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"GRP", "enc"}, cfg.Search.PreferredGroups)
+	assert.Equal(t, map[string]int{"2160p": 8, "480p": 3}, cfg.Search.Resolutions)
+}
+
+func TestSearch_NoResolutionsTableGivesNil(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	body := "[search]\nprowlarr_url = \"http://127.0.0.1:9696\"\n"
+	require.NoError(t, os.WriteFile(configPath, []byte(body), 0o600))
+
+	cfg, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	assert.Nil(t, cfg.Search.Resolutions)
+}
+
+func TestSearch_StringerShowsGroupsAndResolutions(t *testing.T) {
+	cfg := DefaultConfig()
+	assert.Contains(t, cfg.String(), "Groups: none")
+	assert.Contains(t, cfg.String(), "Resolutions: default")
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	body := "[search]\npreferred_groups = [\"GRP\", \"enc\"]\n[search.resolutions]\n\"2160p\" = 8\n\"480p\" = 3\n"
+	require.NoError(t, os.WriteFile(configPath, []byte(body), 0o600))
+
+	loaded, err := LoadFromFile(configPath)
+	require.NoError(t, err)
+	str := loaded.String()
+	assert.Contains(t, str, "Groups: GRP,enc")
+	assert.Contains(t, str, "Resolutions: 2160p=8,480p=3")
+}

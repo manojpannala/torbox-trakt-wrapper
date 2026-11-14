@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -83,8 +85,10 @@ type UIConfig struct {
 }
 
 type SearchConfig struct {
-	ProwlarrURL    string `toml:"prowlarr_url"`
-	ProwlarrAPIKey string `toml:"prowlarr_api_key"`
+	ProwlarrURL     string         `toml:"prowlarr_url"`
+	ProwlarrAPIKey  string         `toml:"prowlarr_api_key"`
+	PreferredGroups []string       `toml:"preferred_groups"`
+	Resolutions     map[string]int `toml:"resolutions"`
 }
 
 // Enabled reports whether both Prowlarr settings are filled in; the URL
@@ -155,8 +159,20 @@ func maskURL(raw string) string {
 }
 
 func (c Config) String() string {
+	groups := "none"
+	if len(c.Search.PreferredGroups) > 0 {
+		groups = strings.Join(c.Search.PreferredGroups, ",")
+	}
+	resolutions := "default"
+	if c.Search.Resolutions != nil {
+		pairs := make([]string, 0, len(c.Search.Resolutions))
+		for _, k := range slices.Sorted(maps.Keys(c.Search.Resolutions)) {
+			pairs = append(pairs, fmt.Sprintf("%s=%d", k, c.Search.Resolutions[k]))
+		}
+		resolutions = strings.Join(pairs, ",")
+	}
 	return fmt.Sprintf(
-		"TorBox[Category: %s, CacheTTL: %dm, Key: %s] | Trakt[Client: %s, Auth: %t, Expired: %t] | Player[%s, IPC: %t] | Search[URL: %s, Key: %s]",
+		"TorBox[Category: %s, CacheTTL: %dm, Key: %s] | Trakt[Client: %s, Auth: %t, Expired: %t] | Player[%s, IPC: %t] | Search[URL: %s, Key: %s, Groups: %s, Resolutions: %s]",
 		c.TorBox.DefaultCategory,
 		c.TorBox.CacheTTLMinutes,
 		MaskSecret(c.TorBox.APIKey),
@@ -167,6 +183,8 @@ func (c Config) String() string {
 		c.Player.EnableIPC,
 		maskURL(c.Search.ProwlarrURL),
 		MaskSecret(c.Search.ProwlarrAPIKey),
+		groups,
+		resolutions,
 	)
 }
 
